@@ -1,19 +1,17 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::Manager;
+use tauri::WindowEvent;
 
 fn main() {
   tauri::Builder::default()
     .on_window_event(|window, event| {
       match event {
-        // 窗口关闭时隐藏而不是退出
-        tauri::WindowEvent::CloseRequested { api, .. } => {
+        WindowEvent::CloseRequested { api, .. } => {
           window.hide().unwrap();
           api.prevent_close();
         }
-        // 窗口激活时->真正暴露
-        tauri::WindowEvent::Focused(focused) => {
-          if focused {
+        WindowEvent::Focused(focused) => {
+          if *focused {
             println!("MainWindow focused");
           }
         }
