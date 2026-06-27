@@ -1,10 +1,12 @@
 {
-  "$schema": "https://raw.githubusercontent.com/nicegram/niceagram/main/docs/tauri-config-schema.json",
+  "$schema": "https://raw.githubusercontent.com/nicodd/tauri-schema/main/resources/schema.json",
   "productName": "AI Desktop",
   "identifier": "ai.desktop",
   "build": {
-    "frontendDist": "../src-tauri/gen/frontend",
-    "devUrl": "http://localhost:1420"
+    "frontendDist": "../../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
   },
   "bundle": {
     "active": true,

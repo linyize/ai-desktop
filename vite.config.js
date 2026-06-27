@@ -10,8 +10,7 @@ export default defineConfig({
   },
   // http://localhost:1420
   build: {
-    // 输出到 src-tauri/gen/bundle
-    outDir: "src-tauri/gen/frontend",
-    env: {},
+    outDir: "dist",
+    emptyOutDir: true
   },
 });
