@@ -31,8 +31,7 @@
         "minHeight": 400,
         "transparent": true,
         "decorations": false,
-        "alwaysOnTop": true,
-        "skippable": true
+        "alwaysOnTop": true
       }
     ],
     "security": {
