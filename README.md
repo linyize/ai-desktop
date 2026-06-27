@@ -147,4 +147,4 @@ npm test
 
 ## 📄 License
 
-MIT License
+AGPL-3.0 License — [查看详情](./LICENSE)

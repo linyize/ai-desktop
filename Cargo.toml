@@ -1,0 +1,18 @@
+[package]
+name = "ai-desktop"
+version = "0.1.0"
+authors = ["linyize"]
+description = "Lightweight AI-native desktop shell for Linux"
+license = "AGPL-3.0"
+edition = "2021"
+
+[dependencies]
+tauri = { version = "2", features = ["shell-open"] }
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.11", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
