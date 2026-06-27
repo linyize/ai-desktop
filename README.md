@@ -2,14 +2,20 @@
 
 > Linux 桌面 AI 化 — 用对话代替点击，专注效率，零冗余。
 
-一个轻量级的 AI 原生 Linux 桌面外壳。通过侧边栏对话窗口，用自然语言控制你的桌面，而不是在菜单、文件管理器和安全沙箱之间穿梭。
+一个轻量级的 AI 原生 Linux 桌面外壳。通过侧边栏对话窗口，用自然语言控制桌面，而不是在菜单和窗口之间反复寻找、点击。
 
 <div align="center">
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![License](https://img.shields.io/badge/license-AGPL_3.0-blue.svg)
 ![Rust](https://img.shields.io/badge/rust-v1.70+-orange.svg)
 ![Tauri](https://img.shields.io/badge//tauri-v2-lt-blue.svg)
 ![Linux](https://img.shields.io/badge//linux-%E2%86%92-green.svg)
+
+</div>
+
+<div align="center">
+
+![AI Desktop Preview](docs/ai-desktop-mockup.png)
 
 </div>
 
