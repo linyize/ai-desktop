@@ -300,6 +300,11 @@ export default function App() {
     }
 
     const userMsg = { id: Date.now(), sender: "user", text: input.trim() };
+    
+    if (messages.length > 60) {
+      await checkAndSummarize();
+    }
+    
     setMessages(prev => [...prev, userMsg]);
     setInput("");
     setIsSending(true);
@@ -584,8 +589,8 @@ export default function App() {
   const checkAndSummarize = async () => {
     const recentMessages = messages.filter(m => m.sender === "user" || m.sender === "ai");
     
-    if (recentMessages.length > 60) {
-      await summarizeConversation(recentMessages);
+    if (messages.length > 60) {
+      await summarizeConversation();
     }
   };
 
@@ -674,9 +679,9 @@ export default function App() {
     }
   };
 
-  const summarizeConversation = async (recentMessagesList) => {
+  const summarizeConversation = async () => {
     try {
-      const recentMessages = recentMessagesList || messages.slice(-20);
+      const keepMessages = messages.slice(-20);
       const oldMessages = messages.slice(0, -20);
       
       let summaryContext = "";
@@ -718,7 +723,7 @@ export default function App() {
         if (summaryText.trim()) {
           setMessages(prev => [
             { id: Date.now(), sender: "system", text: "## 历史对话总结\n" + summaryText },
-            ...recentMessages
+            ...keepMessages
           ]);
         }
       }
@@ -731,6 +736,17 @@ export default function App() {
     setShowWelcome(!localStorage.getItem('ai_provider'));
     
     if (inputText.toLowerCase() === '/clear' || inputText.toLowerCase().startsWith('/clear ')) {
+      let contextText = "";
+      if (memoryData.os || memoryData.settings?.length > 0 || memoryData.habits?.length > 0) {
+        const contextSections = [];
+        if (memoryData.os) contextSections.push(`操作系统: ${memoryData.os}`);
+        if (memoryData.settings && memoryData.settings.length > 0) contextSections.push(`偏好设置: ${memoryData.settings.join(", ")}`);
+        if (memoryData.habits && memoryData.habits.length > 0) contextSections.push(`用户习惯: ${memoryData.habits.slice(-5).join("；")}`);
+        
+        contextText = contextSections.join("\n");
+      }
+      
+      setSystemPrompt(getModePrompt(mode, contextText));
       setMessages([
         { id: Date.now(), sender: "ai", text: "对话已清空。你好！我是你的 AI 助手。需要什么帮助？" }
       ]);
