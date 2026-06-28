@@ -1,223 +1,31 @@
 import { useState, useEffect, useRef } from "react";
 import * as path from "@tauri-apps/api/path";
 
-const dangerousPatterns = [/rm /, /dd /, /mkfs/, /format/, /> \/dev/, /> \/etc/, /> \/boot/];
+import StepMessage from "./components/StepMessage";
+import SettingsModal from "./components/SettingsModal";
+import ConfirmationDialog from "./components/ConfirmationDialog";
+import WelcomeWizard from "./components/WelcomeWizard";
+import AboutDialog from "./components/AboutDialog";
 
-function isDangerousCommand(command) {
-  if (!command) return false;
-  for (const pattern of dangerousPatterns) {
-    if (pattern.test(command)) return true;
-  }
-  return false;
-}
+import { dangerousPatterns, isDangerousCommand } from "./utils/tools";
+import { callTauriTool } from "./utils/tools";
+import { loadPersistentMemory } from "./utils/memory";
 
-function StepMessage({ message, mode }) {
-  const { steps } = message;
-  
-  if (mode !== 'teach' || !steps || steps.length === 0) {
-    return null;
-  }
-
-    return (
-      <div style={{
-        marginTop: '12px',
-        padding: '16px',
-        background: 'rgba(50, 52, 74, 0.8)',
-        borderRadius: '12px'
-      }}>
-        {steps.map((step, idx) => {
-          const stepStatus = step;
-          
-          return (
-            <div key={idx} style={{
-              padding: '16px',
-              marginBottom: '12px',
-              background: idx === 0 && stepStatus.status === 'pending' 
-                ? 'rgba(54, 87, 197, 0.1)' 
-                : stepStatus.status === 'executing'
-                  ? 'rgba(54, 87, 197, 0.2)'
-                  : stepStatus.status === 'done'
-                    ? 'rgba(39, 174, 96, 0.1)'
-                    : stepStatus.status === 'skipped'
-                      ? 'rgba(189, 195, 199, 0.1)'
-                      : stepStatus.status === 'failed'
-                        ? 'rgba(231, 76, 60, 0.1)'
-                        : '#3e415c',
-              borderRadius: '8px',
-              borderLeft: idx === 0 && stepStatus.status === 'pending'
-                ? '4px solid #667eea'
-                : stepStatus.status === 'done'
-                  ? '4px solid #27ae60'
-                  : stepStatus.status === 'skipped'
-                    ? '4px solid #95a5a6'
-                    : stepStatus.status === 'failed'
-                      ? '4px solid #e74c3c'
-                      : '4px solid #3e415c',
-              animation: idx === 0 && stepStatus.status !== 'pending' 
-                ? 'none' 
-                : undefined
-            }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              marginBottom: '8px'
-            }}>
-              <span style={{
-                fontSize: '12px',
-                fontWeight: 600,
-                color: idx === 0 && stepStatus.status === 'pending' ? '#667eea' : '#a9b1d6',
-                background: idx === 0 && stepStatus.status === 'pending'
-                  ? 'rgba(102, 126, 234, 0.15)'
-                  : undefined,
-                padding: '2px 8px',
-                borderRadius: '4px'
-              }}>
-                {idx + 1}
-              </span>
-              <span style={{
-                fontSize: '14px',
-                color: stepStatus.status === 'failed' ? '#e74c3c' : '#a9b1d6',
-                lineHeight: 1.5
-              }}>
-                {step.text}
-              </span>
-            </div>
-            
-            {(stepStatus.status === 'pending' || stepStatus.status === 'executing') && (
-              <div style={{
-                display: 'flex',
-                gap: '8px',
-                marginTop: '8px'
-              }}>
-                <button
-                  onClick={() => {
-                    const event = new CustomEvent('executeStep', { detail: { idx } });
-                    window.dispatchEvent(event);
-                  }}
-                  disabled={stepStatus.status === 'executing'}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: '4px',
-                    border: 'none',
-                    background: stepStatus.status === 'pending' ? '#667eea' : '#3e415c',
-                    color: 'white',
-                    fontSize: '12px',
-                    cursor: stepStatus.status === 'executing' ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  {stepStatus.status === 'pending' ? '执行' : '执行中...'}
-                </button>
-                
-                <button
-                  onClick={() => {
-                    const event = new CustomEvent('skipStep', { detail: { idx } });
-                    window.dispatchEvent(event);
-                  }}
-                  disabled={stepStatus.status === 'executing'}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: '4px',
-                    border: 'none',
-                    background: stepStatus.status === 'pending' ? '#3e415c' : '#95a5a6',
-                    color: '#a9b1d6',
-                    fontSize: '12px',
-                    cursor: stepStatus.status === 'executing' ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  跳过
-                </button>
-                
-                <button
-                  onClick={() => {
-                    const event = new CustomEvent('explainStep', { detail: { text: step.text } });
-                    window.dispatchEvent(event);
-                  }}
-                  disabled={stepStatus.status === 'executing'}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: '4px',
-                    border: 'none',
-                    background: stepStatus.status === 'pending' ? '#7f8c8d' : '#95a5a6',
-                    color: '#ecf0f1',
-                    fontSize: '12px',
-                    cursor: stepStatus.status === 'executing' ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  说明
-                </button>
-              </div>
-            )}
-            
-            {stepStatus.status === 'done' && (
-              <span style={{
-                fontSize: '12px',
-                color: '#27ae60',
-                padding: '4px 8px',
-                background: 'rgba(39, 174, 96, 0.15)',
-                borderRadius: '4px'
-              }}>
-                ✓ 已完成
-              </span>
-            )}
-            
-            {stepStatus.status === 'skipped' && (
-              <span style={{
-                fontSize: '12px',
-                color: '#95a5a6',
-                padding: '4px 8px',
-                background: 'rgba(149, 165, 166, 0.15)',
-                borderRadius: '4px'
-              }}>
-                ↪ 已跳过
-              </span>
-            )}
-            
-            {stepStatus.status === 'failed' && (
-              <span style={{
-                fontSize: '12px',
-                color: '#e74c3c',
-                padding: '4px 8px',
-                background: 'rgba(231, 76, 60, 0.15)',
-                borderRadius: '4px'
-              }}>
-                ✗ 失败
-              </span>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-async function callTauriTool(toolName, toolArgs, onConfirm = null) {
-  const payload = {
-    cmd: toolName,
-    args: toolArgs
+function getModePrompt(mode, context = "") {
+  const prompts = {
+    teach: "你是一个耐心的 AI 教师，擅长用简洁明了的方式讲解知识点，提供示例代码和最佳实践。",
+    auto: "你是一个高效的 AI 编程助手，专注于自动完成编程任务、生成代码、修复 bug 和优化实现。直接给出解决方案。",
+    monitor: "你是一个系统监控专家，负责分析日志、诊断问题、提供运维建议，并帮助理解系统状态。"
   };
+  const modePrompt = prompts[mode] || prompts.teach;
+  const toolsInstruction = `\n\n## 可用工具\n你有以下工具可用：\n1. run_command(command: string) - 执行 shell 命令并返回输出\n2. take_screenshot() - 截图保存到 /tmp/screenshot.png\n3. read_dir(path: string) - 列出目录内容（不包含隐藏文件）\n\n当用户请求需要执行命令、截图或查看文件时，使用工具调用。`;
+  let finalPrompt = modePrompt + toolsInstruction;
   
-  if (typeof window.__TAURI_IPC__ !== 'undefined') {
-    return await window.__TAURI_IPC__(payload);
+  if (context && context.trim()) {
+    finalPrompt += `\n\n## 用户上下文\n${context}`;
   }
   
-  try {
-    const response = await fetch('http://127.0.0.1:1430', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Tool ${toolName} failed: ${response.statusText}`);
-    }
-    
-    const result = await response.json();
-    return result;
-  } catch (error) {
-    throw error;
-  }
+  return finalPrompt;
 }
 
 export default function App() {
@@ -294,23 +102,6 @@ export default function App() {
     }
   ];
 
-  const getModePrompt = (mode, context = "") => {
-    const prompts = {
-      teach: "你是一个耐心的 AI 教师，擅长用简洁明了的方式讲解知识点，提供示例代码和最佳实践。",
-      auto: "你是一个高效的 AI 编程助手，专注于自动完成编程任务、生成代码、修复 bug 和优化实现。直接给出解决方案。",
-      monitor: "你是一个系统监控专家，负责分析日志、诊断问题、提供运维建议，并帮助理解系统状态。"
-    };
-    const modePrompt = prompts[mode] || prompts.teach;
-    const toolsInstruction = `\n\n## 可用工具\n你有以下工具可用：\n1. run_command(command: string) - 执行 shell 命令并返回输出\n2. take_screenshot() - 截图保存到 /tmp/screenshot.png\n3. read_dir(path: string) - 列出目录内容（不包含隐藏文件）\n\n当用户请求需要执行命令、截图或查看文件时，使用工具调用。`;
-    let finalPrompt = modePrompt + toolsInstruction;
-    
-    if (context && context.trim()) {
-      finalPrompt += `\n\n## 用户上下文\n${context}`;
-    }
-    
-    return finalPrompt;
-  };
-
   const handleModeChange = (newMode) => {
     setMode(newMode);
     localStorage.setItem('ai_mode', newMode);
@@ -331,10 +122,11 @@ export default function App() {
       setCurrentStepIndex(-1);
     }
   };
+  
   const chatRef = useRef(null);
 
   useEffect(() => {
-    const loadPersistentMemory = async () => {
+    const loadPersistentMemoryWrapper = async () => {
       try {
         let data;
         
@@ -407,7 +199,7 @@ export default function App() {
       }
     };
     
-    loadPersistentMemory();
+    loadPersistentMemoryWrapper();
     
     const savedMode = localStorage.getItem('ai_mode');
     if (savedMode && ['teach', 'auto', 'monitor'].includes(savedMode)) {
@@ -496,8 +288,8 @@ export default function App() {
 
     const trimmedInput = input.trim();
     
-    if (trimmedInput === "/clear") {
-      handleClearConversation();
+    if (trimmedInput.startsWith("/clear")) {
+      handleClearConversation(trimmedInput);
       setInput("");
       return;
     }
@@ -789,6 +581,14 @@ export default function App() {
     }
   };
 
+  const checkAndSummarize = async () => {
+    const recentMessages = messages.filter(m => m.sender === "user" || m.sender === "ai");
+    
+    if (recentMessages.length > 60) {
+      await summarizeConversation(recentMessages);
+    }
+  };
+
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -796,14 +596,6 @@ export default function App() {
     }
   };
   
-  const checkAndSummarize = async () => {
-    const totalMessages = messages.filter(m => m.sender === "user" || m.sender === "ai").length;
-    
-    if (totalMessages >= 60) {
-      await summarizeConversation();
-    }
-  };
-
   const saveMemory = async () => {
     try {
       const osInfoResult = await callTauriTool("run_command", { command: "uname -a" });
@@ -882,9 +674,9 @@ export default function App() {
     }
   };
 
-  const summarizeConversation = async () => {
+  const summarizeConversation = async (recentMessagesList) => {
     try {
-      const recentMessages = messages.slice(-20);
+      const recentMessages = recentMessagesList || messages.slice(-20);
       const oldMessages = messages.slice(0, -20);
       
       let summaryContext = "";
@@ -935,16 +727,20 @@ export default function App() {
     }
   };
 
-  const handleClearConversation = () => {
-    setMessages([
-      { id: Date.now(), sender: "ai", text: "你好！我是你的 AI 助手。需要什么帮助？" }
-    ]);
-    setInput("");
-    setError(null);
+  const handleClearConversation = (inputText) => {
+    setShowWelcome(!localStorage.getItem('ai_provider'));
     
-    if (mode === 'teach') {
-      setSteps([]);
-      setCurrentStepIndex(-1);
+    if (inputText.toLowerCase() === '/clear' || inputText.toLowerCase().startsWith('/clear ')) {
+      setMessages([
+        { id: Date.now(), sender: "ai", text: "对话已清空。你好！我是你的 AI 助手。需要什么帮助？" }
+      ]);
+      setInput("");
+      setError(null);
+      
+      if (mode === 'teach') {
+        setSteps([]);
+        setCurrentStepIndex(-1);
+      }
     }
   };
 
@@ -1055,346 +851,12 @@ export default function App() {
     setShowSettings(true);
   };
 
-   // 简单设置弹窗
-  const SettingsModal = () => (
-    <div style={{
-      position: 'fixed',
-      top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(12,12,20,0.85)',
-      backdropFilter: 'blur(6px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1000
-    }}>
-      <div style={{
-        background: '#2d2f46',
-        borderRadius: '20px',
-        padding: '40px',
-        width: '450px',
-        maxWidth: '90%',
-        boxShadow: '0 12px 48px rgba(0,0,0,0.6), inset 1px 0 0 rgba(255,255,255,0.05)',
-        border: '1px solid #3e415c'
-      }}>
-         <h2 style={{ marginBottom: '28px', fontSize: '22px', background: 'linear-gradient(135deg, #ffffff 0%, #a9b1d6 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>⚙️ AI 设置</h2>
-         
-        <form onSubmit={handleSaveSettings}>
-          <div style={{ marginBottom: '18px' }}>
-            <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, fontSize: 14, color: '#a9b1d6' }}>
-              AI 提供商
-            </label>
-            <select
-              value={settings.provider}
-              onChange={(e) => setSettings({...settings, provider: e.target.value})}
-              style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', border: '1px solid #3e415c', background: '#1a1b2e', color: '#ffffff' }}
-            >
-               <option value="mock">模拟（测试用）</option>
-              <option value="deepseek">DeepSeek</option>
-              <option value="openai">OpenAI</option>
-              <option value="llama-cpp" selected>llama.cpp (本地)</option>
-              <option value="ollama">Ollama (本地)</option>
-            </select>
-          </div>
-
-          {settings.provider !== 'mock' && (
-            <>
-              <div style={{ marginBottom: '18px' }}>
-                <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, fontSize: 14, color: '#a9b1d6' }}>
-                  API Key
-                </label>
-                <input
-                  type="password"
-                  value={settings.apiKey}
-                  onChange={(e) => setSettings({...settings, apiKey: e.target.value})}
-                  placeholder="sk-***"
-                  style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', border: '1px solid #3e415c', background: '#1a1b2e', color: '#ffffff' }}
-                />
-              </div>
-
-              <div style={{ marginBottom: '18px' }}>
-                <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, fontSize: 14, color: '#a9b1d6' }}>
-                  API URL
-                </label>
-                <input
-                  type="url"
-                  value={settings.apiUrl}
-                  onChange={(e) => setSettings({...settings, apiUrl: e.target.value})}
-                  placeholder="http://127.0.0.1:8082/v1/chat/completions"
-                  style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', border: '1px solid #3e415c', background: '#1a1b2e', color: '#ffffff' }}
-                />
-              </div>
-            </>
-          )}
-
-          <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-            {error && (
-              <span style={{
-                padding: '10px 16px',
-                background: 'rgba(239,68,68,0.1)',
-                color: '#ef4444',
-                fontSize: '14px',
-                borderRadius: '6px'
-              }}>
-                错误：{error}
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={() => setShowSettings(false)}
-              style={{
-                padding: '10px 24px',
-                borderRadius: '8px',
-                border: 'none',
-                background: '#3e415c',
-                color: '#a9b1d6',
-                cursor: 'pointer'
-              }}
-            >
-              取消
-            </button>
-            <button
-              type="submit"
-              style={{
-                padding: '10px 24px',
-                borderRadius: '8px',
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                color: 'white',
-                border: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              保存配置
-            </button>
-          </div>
-        </form>
-
-        {error && (
-          <div style={{ 
-            marginTop: '15px', 
-            padding: '12px 16px', 
-            background: 'rgba(239,68,68,0.1)', 
-            borderRadius: '8px',
-            color: '#ef4444',
-            fontSize: '14px'
-          }}>
-            {error}
-            <button 
-              onClick={closeError} 
-              style={{ 
-                marginLeft: '10px', 
-                background: 'none', 
-                border: 'none', 
-                cursor: 'pointer', 
-                color: '#ef4444',
-                fontWeight: 600
-              }}
-            >
-              ×
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  // About dialog
-  const AboutDialog = () => (
-    <div style={{
-      position: 'fixed',
-      top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(12,12,20,0.8)',
-      backdropFilter: 'blur(6px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 2000
-    }}>
-      <div style={{
-        background: 'var(--bg-panel-dark)',
-        borderRadius: '24px',
-        padding: '48px',
-        width: '360px',
-        maxWidth: '90%',
-        boxShadow: '0 16px 64px rgba(0,0,0,0.7)'
-      }}>
-        <h3 style={{ fontSize: '28px', marginBottom: '16px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-          AI Desktop
-        </h3>
-        <p style={{ color: '#a9b1d6', marginBottom: '8px' }}>版本信息</p>
-        <div style={{ fontSize: '24px', fontWeight: 'bold', background: 'linear-gradient(135deg, #ffffff 0%, #a9b1d6 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-          v0.1.0
-        </div>
-        <p style={{ color: '#a9b1d6', fontSize: '14px', marginTop: '24px' }}>AI 桌面助手</p>
-        <button
-          onClick={() => setShowAbout(false)}
-          style={{
-            marginTop: '32px',
-            width: '100%',
-            padding: '12px 32px',
-            borderRadius: '8px',
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: 'white',
-            border: 'none',
-            fontSize: '15px',
-            fontWeight: 'bold',
-            cursor: 'pointer'
-          }}
-        >
-          关闭
-        </button>
-      </div>
-    </div>
-  );
-
-  const ConfirmationDialog = () => {
-    if (!pendingToolCall) return null;
-    
-    const handleConfirm = (confirmed) => {
-      setConfirmedToolCall(confirmed ? pendingToolCall : false);
-      setPendingToolCall(null);
-    };
-
-    const command = pendingToolCall.toolArgs.command || '';
-    
-    return (
-      <div style={{
-        position: 'fixed',
-        top: 0, left: 0, right: 0, bottom: 0,
-        background: 'rgba(12,12,20,0.85)',
-        backdropFilter: 'blur(6px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 4000
-      }}>
-        <div style={{
-          background: '#2d2f46',
-          borderRadius: '20px',
-          padding: '40px',
-          width: '500px',
-          maxWidth: '90%',
-          boxShadow: '0 12px 48px rgba(0,0,0,0.6), inset 1px 0 0 rgba(255,255,255,0.05)',
-          border: '1px solid #3e415c'
-        }}>
-           <h2 style={{ marginBottom: '20px', fontSize: '22px', background: 'linear-gradient(135deg, #ffffff 0%, #a9b1d6 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>⚠️ 确认危险操作</h2>
-          <p style={{ color: '#ef4444', marginBottom: '24px', fontSize: '15px' }}>
-            AI 想要执行以下危险命令，这可能造成数据丢失或系统损坏：
-          </p>
-          
-          <div style={{
-            marginBottom: '30px',
-            padding: '20px 24px',
-            background: 'rgba(239,68,68,0.1)',
-            borderRadius: '12px',
-            borderLeft: '4px solid #ef4444'
-          }}>
-            <code style={{ color: '#a9b1d6', fontFamily: '"Fira Code", "Consolas", monospace' }}>{command}</code>
-          </div>
-
-          <p style={{ color: '#a9b1d6', marginBottom: '32px', fontSize: '14px', lineHeight: 1.5 }}>
-            是否继续执行？如果不确定，请取消操作。
-          </p>
-
-          <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-            <button
-              onClick={() => handleConfirm(false)}
-              style={{
-                padding: '12px 32px',
-                borderRadius: '8px',
-                border: 'none',
-                background: '#3e415c',
-                color: '#a9b1d6',
-                cursor: 'pointer',
-                fontSize: '15px'
-              }}
-            >
-              取消
-            </button>
-            <button
-              onClick={() => handleConfirm(true)}
-              style={{
-                padding: '12px 32px',
-                borderRadius: '8px',
-                background: '#ef4444',
-                color: 'white',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '15px'
-              }}
-            >
-              继续执行
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-   // 欢迎向导
-  const WelcomeWizard = () => (
-    <div style={{
-      position: 'fixed',
-      top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(12,12,20,0.85)',
-      backdropFilter: 'blur(6px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1000
-    }}>
-      <div style={{
-        background: '#2d2f46',
-        borderRadius: '20px',
-        padding: '40px',
-        width: '450px',
-        maxWidth: '90%',
-        boxShadow: '0 12px 48px rgba(0,0,0,0.6), inset 1px 0 0 rgba(255,255,255,0.05)',
-        border: '1px solid #3e415c'
-      }}>
-         <h2 style={{ marginBottom: '16px', fontSize: '24px', background: 'linear-gradient(135deg, #ffffff 0%, #a9b1d6 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>🤖 欢迎使用 AI Desktop</h2>
-        <p style={{ marginBottom: '24px', color: '#a9b1d6' }}>
-          在开始之前，请先配置你的 AI 接口。
-        </p>
-        
-<div style={{ marginBottom: '28px', padding: '20px 24px', background: 'linear-gradient(135deg, rgba(102,126,234,0.1) 0%, rgba(118,75,162,0.1) 100%)', borderRadius: '16px' }}>
-          <h3 style={{ fontSize: '15px', marginBottom: '12px', color: '#ffffff', fontWeight: 600 }}>推荐配置：</h3>
-          <ul style={{ fontSize: '14px', color: '#a9b1d6', margin: 0, paddingLeft: '24px' }}>
-            <li><strong>AI 提供商：</strong> llama.cpp</li>
-            <li><strong>API URL：</strong> http://127.0.0.1:8082/v1/chat/completions</li>
-            <li><strong>API Key：</strong> （空）</li>
-          </ul>
-        </div>
-
-        <button
-          onClick={() => {
-            setShowWelcome(false);
-            setShowSettings(true);
-          }}
-          style={{
-            width: '100%',
-            padding: '16px',
-            borderRadius: '12px',
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: 'white',
-            border: 'none',
-            fontSize: '16px',
-            fontWeight: 600,
-            cursor: 'pointer',
-            boxShadow: '0 8px 24px rgba(102,126,234,0.35)'
-          }}
-        >
-          开始配置
-        </button>
-      </div>
-    </div>
-  );
-
-    return (
+  return (
       <div className="ai-sidebar" style={{ display: show ? "flex" : "none" }}>
-        {showAbout && <AboutDialog />}
-        {showSettings && <SettingsModal />}
-        {showWelcome && <WelcomeWizard />}
-        {pendingToolCall && <ConfirmationDialog />}
+        {showAbout && <AboutDialog showAbout={showAbout} setShowAbout={setShowAbout} />}
+        {showSettings && <SettingsModal settings={settings} setSettings={setSettings} setShowSettings={setShowSettings} setShowWelcome={setShowWelcome} closeError={closeError} error={error} />}
+        {showWelcome && <WelcomeWizard showWelcome={showWelcome} setShowWelcome={setShowWelcome} setShowSettings={setShowSettings} />}
+        {pendingToolCall && <ConfirmationDialog pendingToolCall={pendingToolCall} confirmedToolCall={confirmedToolCall} setConfirmedToolCall={setConfirmedToolCall} setPendingToolCall={setPendingToolCall} />}
 
       {contextMenu.visible && (
         <div
