@@ -1,5 +1,29 @@
 import { useState, useEffect, useRef } from "react";
 
+async function callTauriTool(toolName, toolArgs) {
+  const payload = {
+    cmd: toolName,
+    args: toolArgs
+  };
+  
+  if (typeof window.__TAURI_IPC__ !== 'undefined') {
+    return await window.__TAURI_IPC__(payload);
+  }
+  
+  const response = await fetch('http://127.0.0.1:1430', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Tool ${toolName} failed: ${response.statusText}`);
+  }
+  
+  const result = await response.json();
+  return result;
+}
+
 export default function App() {
   const [show, setShow] = useState(true);
   const [input, setInput] = useState("");
@@ -20,13 +44,63 @@ export default function App() {
   const [showAbout, setShowAbout] = useState(false);
   const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0 });
 
+  const tools = [
+    {
+      type: "function",
+      function: {
+        name: "run_command",
+        description: "Run a shell command and return the output. Useful for executing system commands.",
+        parameters: {
+          type: "object",
+          properties: {
+            command: {
+              type: "string",
+              description: "The shell command to execute"
+            }
+          },
+          required: ["command"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "take_screenshot",
+        description: "Take a screenshot using gnome-screenshot and save it to /tmp/screenshot.png. Returns the file path.",
+        parameters: {
+          type: "object",
+          properties: {}
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "read_dir",
+        description: "Read a directory and return a list of entry names (excluding hidden files). Useful for exploring filesystem.",
+        parameters: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "The directory path to read"
+            }
+          },
+          required: ["path"]
+        }
+      }
+    }
+  ];
+
   const getModePrompt = (mode) => {
     const prompts = {
       teach: "你是一个耐心的 AI 教师，擅长用简洁明了的方式讲解知识点，提供示例代码和最佳实践。",
       auto: "你是一个高效的 AI 编程助手，专注于自动完成编程任务、生成代码、修复 bug 和优化实现。直接给出解决方案。",
       monitor: "你是一个系统监控专家，负责分析日志、诊断问题、提供运维建议，并帮助理解系统状态。"
     };
-    return prompts[mode] || prompts.teach;
+    const modePrompt = prompts[mode] || prompts.teach;
+    const toolsInstruction = `\n\n## 可用工具\n你有以下工具可用：\n1. run_command(command: string) - 执行 shell 命令并返回输出\n2. take_screenshot() - 截图保存到 /tmp/screenshot.png\n3. read_dir(path: string) - 列出目录内容（不包含隐藏文件）\n\n当用户请求需要执行命令、截图或查看文件时，使用工具调用。`;
+    return modePrompt + toolsInstruction;
   };
 
   const handleModeChange = (newMode) => {
@@ -71,9 +145,7 @@ export default function App() {
     setError(null);
 
     try {
-      const apiUrl = settings.apiUrl || 'http://127.0.0.1:8082/v1/chat/completions';
-      const model = 'coder-next';
-      const messagesToSend = [
+      let messagesToSend = [
         { role: "system", content: systemPrompt },
         ...messages,
         userMsg
@@ -82,57 +154,139 @@ export default function App() {
         content: m.text
       }));
 
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(settings.apiKey && { Authorization: `Bearer ${settings.apiKey}` })
-        },
-        body: JSON.stringify({
-          model: model,
-          messages: messagesToSend,
-          stream: true
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`API 请求失败: ${response.statusText}`);
-      }
-
-      const aiMsgId = Date.now() + 1;
-      setMessages(prev => [...prev, { id: aiMsgId, sender: "ai", text: "" }]);
-      
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let fullResponse = "";
-
       while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        const apiUrl = settings.apiUrl || 'http://127.0.0.1:8082/v1/chat/completions';
+        const model = 'coder-next';
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n').filter(line => line.trim() !== '');
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(settings.apiKey && { Authorization: `Bearer ${settings.apiKey}` })
+          },
+          body: JSON.stringify({
+            model: model,
+            messages: messagesToSend,
+            stream: true,
+            tools: tools
+          })
+        });
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') break;
+        if (!response.ok) {
+          throw new Error(`API 请求失败: ${response.statusText}`);
+        }
 
-            try {
-              const parsed = JSON.parse(data);
-              const content = parsed.choices?.[0]?.delta?.content || '';
-              fullResponse += content;
-              
-              setMessages(prev => 
-                prev.map(msg => 
-                  msg.id === aiMsgId ? { ...msg, text: fullResponse } : msg
-                )
-              );
-            } catch (e) {
-              console.error('解析响应失败:', e);
+        const aiMsgId = Date.now() + 1;
+        setMessages(prev => [...prev, { id: aiMsgId, sender: "ai", text: "" }]);
+        
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullResponse = "";
+        let toolCalls = null;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n').filter(line => line.trim() !== '');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') break;
+
+              try {
+                const parsed = JSON.parse(data);
+                const content = parsed.choices?.[0]?.delta?.content || '';
+                fullResponse += content;
+                
+                const newToolCalls = parsed.choices?.[0]?.delta?.tool_calls;
+                if (newToolCalls) {
+                  toolCalls = newToolCalls;
+                }
+                
+                setMessages(prev => 
+                  prev.map(msg => 
+                    msg.id === aiMsgId ? { ...msg, text: fullResponse } : msg
+                  )
+                );
+              } catch (e) {
+                console.error('解析响应失败:', e);
+              }
             }
           }
         }
+
+        if (toolCalls && toolCalls.length > 0) {
+          for (const toolCall of toolCalls) {
+            const toolName = toolCall.function.name;
+            let toolArgs = {};
+            
+            try {
+              toolArgs = JSON.parse(toolCall.function.arguments || '{}');
+            } catch (e) {
+              console.error('解析工具参数失败:', e);
+              continue;
+            }
+
+            try {
+              const result = await callTauriTool(toolName, toolArgs);
+              
+              setMessages(prev => [
+                ...prev,
+                { 
+                  id: Date.now(), 
+                  sender: "tool", 
+                  text: `🛠️ 工具 ${toolName} 结果:\n\`\`\`json\n${JSON.stringify(result, null, 2)}\n\`\`\`` 
+                }
+              ]);
+
+              messagesToSend = [
+                ...messagesToSend,
+                {
+                  role: "assistant",
+                  content: fullResponse,
+                  tool_calls: [toolCall]
+                },
+                {
+                  role: "tool",
+                  name: toolName,
+                  content: JSON.stringify(result)
+                }
+              ];
+            } catch (error) {
+              console.error(`工具 ${toolName} 执行失败:`, error);
+              
+              setMessages(prev => [
+                ...prev,
+                { 
+                  id: Date.now(), 
+                  sender: "tool", 
+                  text: `❌ 工具 ${toolName} 执行失败: ${error.message}` 
+                }
+              ]);
+
+              messagesToSend = [
+                ...messagesToSend,
+                {
+                  role: "assistant",
+                  content: fullResponse,
+                  tool_calls: [toolCall]
+                },
+                {
+                  role: "tool",
+                  name: toolName,
+                  content: `Error: ${error.message}`
+                }
+              ];
+            }
+          }
+          
+          continue;
+        }
+
+        break;
       }
     } catch (error) {
       console.error("发送失败:", error);
