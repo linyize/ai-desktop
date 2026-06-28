@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import * as path from "@tauri-apps/api/path";
 
 const dangerousPatterns = [/rm /, /dd /, /mkfs/, /format/, /> \/dev/, /> \/etc/, /> \/boot/];
 
@@ -243,6 +244,7 @@ export default function App() {
   const [retryCounts, setRetryCounts] = useState({});
   const [steps, setSteps] = useState([]);
   const [currentStepIndex, setCurrentStepIndex] = useState(-1);
+  const [memoryData, setMemoryData] = useState({ os: "", tools: [], projects: [] });
 
   const tools = [
     {
@@ -315,6 +317,38 @@ export default function App() {
   const chatRef = useRef(null);
 
   useEffect(() => {
+    const loadMemoryFromStorage = async () => {
+      try {
+        let data;
+        
+        try {
+          const stored = localStorage.getItem('ai_memory');
+          if (stored) {
+            data = JSON.parse(stored);
+          }
+        } catch (parseErr) {}
+        
+        if (data) {
+          setMemoryData(data);
+          
+          if ((data.os || data.tools?.length > 0 || data.projects?.length > 0)) {
+            setSystemPrompt(prev => {
+              const contextSections = [];
+              if (data.os) contextSections.push("操作系统: " + data.os);
+              if (data.tools && data.tools.length > 0) contextSections.push("偏好工具: " + data.tools.join(", "));
+              if (data.projects && data.projects.length > 0) contextSections.push("最近项目: " + data.projects.slice(-3).join("，"));
+              
+              return contextSections.length > 0 ? prev + "\n\n## 用户上下文\n" + contextSections.join("\n") : prev;
+            });
+          }
+        }
+      } catch (err) {
+        console.error("加载记忆失败:", err);
+      }
+    };
+    
+    loadMemoryFromStorage();
+    
     const savedMode = localStorage.getItem('ai_mode');
     if (savedMode && ['teach', 'auto', 'monitor'].includes(savedMode)) {
       setMode(savedMode);
@@ -399,6 +433,14 @@ export default function App() {
 
   const handleSend = async () => {
     if (!input.trim()) return;
+
+    const trimmedInput = input.trim();
+    
+    if (trimmedInput === "/clear") {
+      handleClearConversation();
+      setInput("");
+      return;
+    }
 
     if (mode === 'teach' && currentStepIndex >= 0 && currentStepIndex < steps.length) {
       await executeCurrentStep();
@@ -667,6 +709,13 @@ export default function App() {
 
         break;
       }
+      
+      await checkAndSummarize();
+      
+      const aiMessage = messages.find(m => m.sender === "ai" && !m.steps);
+      if (aiMessage) {
+        await saveMemory();
+      }
     } catch (error) {
       console.error("发送失败:", error);
       setError(error.message || '请求失败，请检查配置');
@@ -684,6 +733,145 @@ export default function App() {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+  };
+  
+  const checkAndSummarize = async () => {
+    const totalMessages = messages.filter(m => m.sender === "user" || m.sender === "ai").length;
+    
+    if (totalMessages >= 60) {
+      await summarizeConversation();
+    }
+  };
+
+  const saveMemory = async () => {
+    try {
+      const osInfo = window.navigator.userAgent;
+      const currentTools = [...(memoryData.tools || [])];
+      const newProjects = [];
+      
+      for (const msg of messages.slice(-5)) {
+        if (msg.sender === "ai" && msg.text) {
+          const textLower = msg.text.toLowerCase();
+          
+          if (/项目|project|workspace|repo/i.test(textLower)) {
+            const projectMatch = msg.text.match(/(['"`]\/[\s\S]+?['"`])|(\w+\/\w+)/);
+            if (projectMatch && projectMatch[0]) {
+              newProjects.push(projectMatch[0].replace(/['"`]/g, ""));
+            }
+          }
+          
+          if (/工具|package|npm|pip|cargo/i.test(textLower)) {
+            const toolMatches = msg.text.matchAll(/(['"`]\w+['"`]|\b(react|vue|angular|nextjs|nodejs|python|go|Rust)\b)/gi);
+            for (const match of toolMatches) {
+              if (match[0] && !currentTools.includes(match[0].replace(/['"`]/g, ""))) {
+                currentTools.push(match[0].replace(/['"`]/g, ""));
+              }
+            }
+          }
+        }
+      }
+      
+      const memorySummary = {
+        os: osInfo,
+        tools: Array.from(new Set(currentTools.slice(-10))),
+        projects: newProjects.slice(-5),
+        updatedAt: new Date().toISOString()
+      };
+      
+      try {
+        const configDir = await path.appConfigDir("ai-desktop");
+        
+        if (typeof window.__TAURI_IPC__ !== 'undefined') {
+          // Try using Tauri IPC to write to file
+          try {
+            const fsModule = await import("@tauri-apps/plugin-fs");
+            
+            try {
+              await fsModule.mkdir(configDir, { recursive: true });
+            } catch (err) {}
+            
+            await fsModule.writeFile(
+              configDir + "/memory.json",
+              new TextEncoder().encode(JSON.stringify(memorySummary, null, 2))
+            );
+          } catch (fsErr) {
+            localStorage.setItem('ai_memory', JSON.stringify(memorySummary));
+          }
+        } else {
+          localStorage.setItem('ai_memory', JSON.stringify(memorySummary));
+        }
+      } catch (err) {
+        localStorage.setItem('ai_memory', JSON.stringify(memorySummary));
+      }
+    } catch (err) {
+      console.error("保存记忆失败:", err);
+    }
+  };
+
+  const summarizeConversation = async () => {
+    try {
+      const recentMessages = messages.slice(-20);
+      const oldMessages = messages.slice(0, -20);
+      
+      let summaryContext = "";
+      for (const msg of oldMessages) {
+        if (msg.sender === "user" || msg.sender === "ai") {
+          summaryContext += msg.sender === "user" ? "用户: " + msg.text : "AI: " + msg.text;
+          summaryContext += "\n";
+        }
+      }
+      
+      const apiUrl = settings.apiUrl || 'http://127.0.0.1:8082/v1/chat/completions';
+      
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(settings.apiKey && { Authorization: `Bearer ${settings.apiKey}` })
+        },
+        body: JSON.stringify({
+          model: 'coder-next',
+          messages: [
+            { 
+              role: "system", 
+              content: "请将以下对话历史总结为一条简洁的系统上下文消息，保留关键信息。输出应为一段连贯的文字：" 
+            },
+            { 
+              role: "user", 
+              content: summaryContext 
+            }
+          ],
+          stream: false
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const summaryText = data.choices?.[0]?.message?.content || "";
+        
+        if (summaryText.trim()) {
+          setMessages(prev => [
+            { id: Date.now(), sender: "system", text: "## 历史对话总结\n" + summaryText },
+            ...recentMessages
+          ]);
+        }
+      }
+    } catch (error) {
+      console.error("对话总结失败:", error);
+    }
+  };
+
+  const handleClearConversation = () => {
+    setMessages([
+      { id: Date.now(), sender: "ai", text: "你好！我是你的 AI 助手。需要什么帮助？" }
+    ]);
+    setInput("");
+    setError(null);
+    
+    if (mode === 'teach') {
+      setSteps([]);
+      setCurrentStepIndex(-1);
     }
   };
 

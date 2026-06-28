@@ -10,8 +10,31 @@ on:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
-    
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            packages: libwebkit2gtk-4.1-dev build-essential curl wget file pkg-config libssl-dev libayatana-appindicator3-dev
+            bundle: |
+              src-tauri/target/release/bundle/appimage/*.AppImage
+              src-tauri/target/release/bundle/deb/*.deb
+              src-tauri/target/release/bundle/rpm/*.rpm
+
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            packages: ""
+            bundle: |
+              src-tauri/target/release/bundle/dmg/*.dmg
+
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            packages: ""
+            bundle: |
+              src-tauri/target/release/bundle/msi/*.msi
+
+    runs-on: ${{ matrix.os }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -25,19 +48,14 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
+          targets: ${{ matrix.target }}
           components: rust-src
 
-      - name: Install dependencies
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev \
-            build-essential \
-            curl \
-            wget \
-            file \
-            pkg-config \
-            libssl-dev \
-            libayatana-appindicator3-dev
+          sudo apt-get install -y ${{ matrix.packages }}
 
       - name: Install Tauri CLI
         run: npm install -g @tauri-apps/cli
@@ -51,16 +69,12 @@ jobs:
         env:
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
-        run: |
-          cargo tauri build --target x86_64-unknown-linux-gnu
+        run: cargo tauri build --target ${{ matrix.target }}
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/v')
         with:
-          files: |
-            src-tauri/target/release/bundle/appimage/*.AppImage
-            src-tauri/target/release/bundle/deb/*.deb
-            src-tauri/target/release/bundle/rpm/*.rpm
+          files: ${{ matrix.bundle }}
           draft: false
           prerelease: false

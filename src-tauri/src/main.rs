@@ -5,8 +5,13 @@ use tauri::{command, Manager, tray::TrayIconBuilder, tray::TrayIconEvent, Window
 
 #[command]
 fn run_command(command: String) -> Result<String, String> {
-  let output = Command::new("sh")
-    .arg("-c")
+  #[cfg(target_os = "windows")]
+  let shell = ("cmd", "/c");
+  #[cfg(not(target_os = "windows"))]
+  let shell = ("sh", "-c");
+
+  let output = Command::new(shell.0)
+    .arg(shell.1)
     .arg(command)
     .output()
     .map_err(|e| e.to_string())?;
@@ -20,14 +25,20 @@ fn run_command(command: String) -> Result<String, String> {
 
 #[command]
 fn take_screenshot() -> Result<String, String> {
-  let output = Command::new("gnome-screenshot")
-    .arg("-f")
-    .arg("/tmp/screenshot.png")
+  #[cfg(target_os = "linux")]
+  let (cmd, args, out) = ("gnome-screenshot", vec!["-f", "/tmp/screenshot.png"], "/tmp/screenshot.png");
+  #[cfg(target_os = "macos")]
+  let (cmd, args, out) = ("screencapture", vec!["-x", "/tmp/screenshot.png"], "/tmp/screenshot.png");
+  #[cfg(target_os = "windows")]
+  let (cmd, args, out) = ("powershell", vec!["-Command", "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('{PRTSC}'); Start-Sleep -Seconds 1; $img = [System.Windows.Forms.Clipboard]::GetImage(); $img.Save('C:\\temp\\screenshot.png')"], "C:\\temp\\screenshot.png");
+
+  let output = Command::new(cmd)
+    .args(&args)
     .output()
     .map_err(|e| e.to_string())?;
 
   if output.status.success() {
-    Ok("/tmp/screenshot.png".to_string())
+    Ok(out.to_string())
   } else {
     Err(String::from_utf8_lossy(&output.stderr).to_string())
   }
