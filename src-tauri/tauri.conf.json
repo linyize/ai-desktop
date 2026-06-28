@@ -18,6 +18,10 @@
   },
   "app": {
     "withGlobalTauri": true,
+    "systemTray": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true
+    },
     "windows": [
       {
         "label": "ai-sidebar",
