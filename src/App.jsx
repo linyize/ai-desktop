@@ -244,7 +244,7 @@ export default function App() {
   const [retryCounts, setRetryCounts] = useState({});
   const [steps, setSteps] = useState([]);
   const [currentStepIndex, setCurrentStepIndex] = useState(-1);
-  const [memoryData, setMemoryData] = useState({ os: "", tools: [], projects: [] });
+  const [memoryData, setMemoryData] = useState({ os: "", settings: [], habits: [] });
 
   const tools = [
     {
@@ -294,7 +294,7 @@ export default function App() {
     }
   ];
 
-  const getModePrompt = (mode) => {
+  const getModePrompt = (mode, context = "") => {
     const prompts = {
       teach: "你是一个耐心的 AI 教师，擅长用简洁明了的方式讲解知识点，提供示例代码和最佳实践。",
       auto: "你是一个高效的 AI 编程助手，专注于自动完成编程任务、生成代码、修复 bug 和优化实现。直接给出解决方案。",
@@ -302,13 +302,30 @@ export default function App() {
     };
     const modePrompt = prompts[mode] || prompts.teach;
     const toolsInstruction = `\n\n## 可用工具\n你有以下工具可用：\n1. run_command(command: string) - 执行 shell 命令并返回输出\n2. take_screenshot() - 截图保存到 /tmp/screenshot.png\n3. read_dir(path: string) - 列出目录内容（不包含隐藏文件）\n\n当用户请求需要执行命令、截图或查看文件时，使用工具调用。`;
-    return modePrompt + toolsInstruction;
+    let finalPrompt = modePrompt + toolsInstruction;
+    
+    if (context && context.trim()) {
+      finalPrompt += `\n\n## 用户上下文\n${context}`;
+    }
+    
+    return finalPrompt;
   };
 
   const handleModeChange = (newMode) => {
     setMode(newMode);
     localStorage.setItem('ai_mode', newMode);
-    setSystemPrompt(getModePrompt(newMode));
+    
+    let contextText = "";
+    if (memoryData.os || memoryData.settings?.length > 0 || memoryData.habits?.length > 0) {
+      const contextSections = [];
+      if (memoryData.os) contextSections.push(`操作系统: ${memoryData.os}`);
+      if (memoryData.settings && memoryData.settings.length > 0) contextSections.push(`偏好设置: ${memoryData.settings.join(", ")}`);
+      if (memoryData.habits && memoryData.habits.length > 0) contextSections.push(`用户习惯: ${memoryData.habits.slice(-5).join("；")}`);
+      
+      contextText = contextSections.join("\n");
+    }
+    
+    setSystemPrompt(getModePrompt(newMode, contextText));
     if (newMode !== 'teach') {
       setSteps([]);
       setCurrentStepIndex(-1);
@@ -317,37 +334,80 @@ export default function App() {
   const chatRef = useRef(null);
 
   useEffect(() => {
-    const loadMemoryFromStorage = async () => {
+    const loadPersistentMemory = async () => {
       try {
         let data;
         
         try {
-          const stored = localStorage.getItem('ai_memory');
-          if (stored) {
-            data = JSON.parse(stored);
+          const configDirResult = await callTauriTool("run_command", { command: "echo -n ~/.config/ai-desktop" });
+          if (configDirResult && configDirResult.stdout) {
+            const configDir = configDirResult.stdout.trim();
+            
+            try {
+              const memoryFileContent = await callTauriTool("run_command", { 
+                command: `cat ${configDir}/memory.json 2>/dev/null` 
+              });
+              
+              if (memoryFileContent && memoryFileContent.stdout) {
+                data = JSON.parse(memoryFileContent.stdout.trim());
+              }
+            } catch (err) {}
           }
-        } catch (parseErr) {}
+        } catch (fileErr) {}
+        
+        const configDirResult = await callTauriTool("run_command", { command: "echo -n ~/.config/ai-desktop" });
+        if (configDirResult && configDirResult.stdout) {
+          const configDir = configDirResult.stdout.trim();
+          
+          try {
+            const mkdirResult = await callTauriTool("run_command", { 
+              command: `mkdir -p ${configDir}` 
+            });
+          } catch (err) {}
+        }
+        
+        let loadedFromLocalStorage = false;
+        if (!data && typeof window.__TAURI_IPC__ !== 'undefined') {
+          try {
+            const stored = localStorage.getItem('ai_memory');
+            if (stored) {
+              data = JSON.parse(stored);
+              loadedFromLocalStorage = true;
+            }
+          } catch (parseErr) {}
+        }
         
         if (data) {
-          setMemoryData(data);
+          let normalizedData = data;
           
-          if ((data.os || data.tools?.length > 0 || data.projects?.length > 0)) {
+          if (loadedFromLocalStorage && !data.settings) {
+            normalizedData = {
+              os: data.os || "",
+              settings: Array.isArray(data.tools) ? data.tools.map(t => `工具偏好: ${t}`) : [],
+              habits: Array.isArray(data.projects) ? data.projects.map(p => `项目相关: ${p}`) : []
+            };
+          }
+          
+          setMemoryData(normalizedData);
+          
+          if ((normalizedData.os || normalizedData.settings?.length > 0 || normalizedData.habits?.length > 0)) {
+            const contextSections = [];
+            if (normalizedData.os) contextSections.push(`操作系统: ${normalizedData.os}`);
+            if (normalizedData.settings && normalizedData.settings.length > 0) contextSections.push(`偏好设置: ${normalizedData.settings.join(", ")}`);
+            if (normalizedData.habits && normalizedData.habits.length > 0) contextSections.push(`用户习惯: ${normalizedData.habits.slice(-5).join("；")}`);
+            
             setSystemPrompt(prev => {
-              const contextSections = [];
-              if (data.os) contextSections.push("操作系统: " + data.os);
-              if (data.tools && data.tools.length > 0) contextSections.push("偏好工具: " + data.tools.join(", "));
-              if (data.projects && data.projects.length > 0) contextSections.push("最近项目: " + data.projects.slice(-3).join("，"));
-              
-              return contextSections.length > 0 ? prev + "\n\n## 用户上下文\n" + contextSections.join("\n") : prev;
+              const contextText = contextSections.length > 0 ? contextSections.join("\n") : "";
+              return getModePrompt(mode, contextText);
             });
           }
         }
       } catch (err) {
-        console.error("加载记忆失败:", err);
+        console.error("加载持久化记忆失败:", err);
       }
     };
     
-    loadMemoryFromStorage();
+    loadPersistentMemory();
     
     const savedMode = localStorage.getItem('ai_mode');
     if (savedMode && ['teach', 'auto', 'monitor'].includes(savedMode)) {
@@ -746,63 +806,76 @@ export default function App() {
 
   const saveMemory = async () => {
     try {
-      const osInfo = window.navigator.userAgent;
-      const currentTools = [...(memoryData.tools || [])];
-      const newProjects = [];
+      const osInfoResult = await callTauriTool("run_command", { command: "uname -a" });
+      const osInfo = (osInfoResult && osInfoResult.stdout) ? osInfoResult.stdout.trim() : window.navigator.userAgent;
       
-      for (const msg of messages.slice(-5)) {
-        if (msg.sender === "ai" && msg.text) {
+      let newSettings = [];
+      let newHabits = [];
+      
+      for (const msg of messages.slice(-10)) {
+        if (msg.sender === "user" || msg.sender === "ai") {
           const textLower = msg.text.toLowerCase();
           
-          if (/项目|project|workspace|repo/i.test(textLower)) {
-            const projectMatch = msg.text.match(/(['"`]\/[\s\S]+?['"`])|(\w+\/\w+)/);
-            if (projectMatch && projectMatch[0]) {
-              newProjects.push(projectMatch[0].replace(/['"`]/g, ""));
+          if (/设置|config|偏好|preference/i.test(textLower) && settings.provider !== 'mock') {
+            if (!newSettings.includes(`AI提供商: ${settings.provider}`)) {
+              newSettings.push(`AI提供商: ${settings.provider}`);
             }
           }
           
-          if (/工具|package|npm|pip|cargo/i.test(textLower)) {
-            const toolMatches = msg.text.matchAll(/(['"`]\w+['"`]|\b(react|vue|angular|nextjs|nodejs|python|go|Rust)\b)/gi);
-            for (const match of toolMatches) {
-              if (match[0] && !currentTools.includes(match[0].replace(/['"`]/g, ""))) {
-                currentTools.push(match[0].replace(/['"`]/g, ""));
+          const habitKeywords = ["习惯", "经常", "通常", "偏好", "喜欢"];
+          for (const keyword of habitKeywords) {
+            if (textLower.includes(keyword)) {
+              const extractedHabit = msg.text.trim().substring(0, 100);
+              if (extractedHabit && !newHabits.includes(extractedHabit)) {
+                newHabits.push(extractedHabit);
               }
             }
           }
         }
       }
       
+      const combinedSettings = Array.from(new Set([...(memoryData.settings || []), ...newSettings])).slice(-10);
+      const combinedHabits = Array.from(new Set([...(memoryData.habits || []), ...newHabits])).slice(-5);
+      
       const memorySummary = {
         os: osInfo,
-        tools: Array.from(new Set(currentTools.slice(-10))),
-        projects: newProjects.slice(-5),
+        settings: combinedSettings,
+        habits: combinedHabits,
         updatedAt: new Date().toISOString()
       };
       
       try {
-        const configDir = await path.appConfigDir("ai-desktop");
-        
-        if (typeof window.__TAURI_IPC__ !== 'undefined') {
-          // Try using Tauri IPC to write to file
+        const configDirResult = await callTauriTool("run_command", { command: "echo -n ~/.config/ai-desktop" });
+        if (configDirResult && configDirResult.stdout) {
+          const configDir = configDirResult.stdout.trim();
+          
           try {
-            const fsModule = await import("@tauri-apps/plugin-fs");
-            
-            try {
-              await fsModule.mkdir(configDir, { recursive: true });
-            } catch (err) {}
-            
-            await fsModule.writeFile(
-              configDir + "/memory.json",
-              new TextEncoder().encode(JSON.stringify(memorySummary, null, 2))
-            );
-          } catch (fsErr) {
-            localStorage.setItem('ai_memory', JSON.stringify(memorySummary));
+            await callTauriTool("run_command", { 
+              command: `mkdir -p ${configDir}` 
+            });
+          } catch (err) {}
+          
+          const memoryFileContent = JSON.stringify(memorySummary, null, 2);
+          
+          if (memoryFileContent.split('\n').length > 50) {
+            memorySummary.habits = memorySummary.habits.slice(-3);
+            memorySummary.settings = memorySummary.settings.slice(-5);
+            memorySummary.updatedAt = new Date().toISOString();
           }
-        } else {
-          localStorage.setItem('ai_memory', JSON.stringify(memorySummary));
+          
+          const escapedConfigDir = configDir.replace(/'/g, "'\"'\"'");
+          await callTauriTool("run_command", {
+            command: `cat > ${escapedConfigDir}/memory.json << 'MEMORYEOF'\n${JSON.stringify(memorySummary, null, 2)}\nMEMORYEOF`
+          });
         }
       } catch (err) {
-        localStorage.setItem('ai_memory', JSON.stringify(memorySummary));
+        console.error("写入持久化记忆失败:", err);
+        try {
+          const stored = localStorage.getItem('ai_memory');
+          if (!stored) {
+            localStorage.setItem('ai_memory', JSON.stringify(memorySummary));
+          }
+        } catch (localErr) {}
       }
     } catch (err) {
       console.error("保存记忆失败:", err);
