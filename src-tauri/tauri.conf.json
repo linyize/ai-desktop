@@ -3,7 +3,7 @@
   "productName": "AI Desktop",
   "identifier": "ai.desktop",
   "build": {
-    "frontendDist": "../../dist",
+    "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "npm run build"
   },
@@ -18,10 +18,6 @@
   },
   "app": {
     "withGlobalTauri": true,
-    "systemTray": {
-      "iconPath": "icons/icon.png",
-      "iconAsTemplate": true
-    },
     "windows": [
       {
         "label": "ai-sidebar",

@@ -1,7 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::process::Command;
-use tauri::{command, Manager, WindowEvent};
+use tauri::{command, WindowEvent};
 
 #[command]
 fn run_command(command: String) -> Result<String, String> {
@@ -35,12 +35,14 @@ fn take_screenshot() -> Result<String, String> {
 
 #[command]
 fn read_dir(path: String) -> Result<Vec<String>, String> {
-  std::fs::read_dir(&path)
+  let entries: Vec<String> = std::fs::read_dir(&path)
     .map_err(|e| e.to_string())?
     .filter_map(|entry| entry.ok())
     .filter(|entry| !entry.file_name().to_string_lossy().starts_with('.'))
     .map(|entry| entry.file_name().to_string_lossy().to_string())
-    .collect()
+    .collect();
+  
+  Ok(entries)
 }
 
 fn main() {
@@ -58,21 +60,6 @@ fn main() {
         }
         _ => {}
       }
-    })
-    .setup(|app| {
-      let tray_handle = app.tray_handle();
-      
-      tray_handle.on_tray_icon_event(|tray, event| {
-        if let tauri::TrayIconEvent::Click { .. } = event {
-          let window = tray.window();
-          if let Some(w) = window {
-            w.show().unwrap();
-            w.set_focus().unwrap();
-          }
-        }
-      });
-      
-      Ok(())
     })
     .invoke_handler(tauri::generate_handler!(run_command, take_screenshot, read_dir))
     .run(tauri::generate_context!())
