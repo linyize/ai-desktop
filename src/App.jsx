@@ -1,6 +1,16 @@
 import { useState, useEffect, useRef } from "react";
 
-async function callTauriTool(toolName, toolArgs) {
+const dangerousPatterns = [/rm /, /dd /, /mkfs/, /format/, /> \/dev/, /> \/etc/, /> \/boot/];
+
+function isDangerousCommand(command) {
+  if (!command) return false;
+  for (const pattern of dangerousPatterns) {
+    if (pattern.test(command)) return true;
+  }
+  return false;
+}
+
+async function callTauriTool(toolName, toolArgs, onConfirm = null) {
   const payload = {
     cmd: toolName,
     args: toolArgs
@@ -10,18 +20,22 @@ async function callTauriTool(toolName, toolArgs) {
     return await window.__TAURI_IPC__(payload);
   }
   
-  const response = await fetch('http://127.0.0.1:1430', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  
-  if (!response.ok) {
-    throw new Error(`Tool ${toolName} failed: ${response.statusText}`);
+  try {
+    const response = await fetch('http://127.0.0.1:1430', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Tool ${toolName} failed: ${response.statusText}`);
+    }
+    
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    throw error;
   }
-  
-  const result = await response.json();
-  return result;
 }
 
 export default function App() {
@@ -43,6 +57,8 @@ export default function App() {
   const [error, setError] = useState(null);
   const [showAbout, setShowAbout] = useState(false);
   const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0 });
+  const [confirmedToolCall, setConfirmedToolCall] = useState(null);
+  const [pendingToolCall, setPendingToolCall] = useState(null);
 
   const tools = [
     {
@@ -230,9 +246,71 @@ export default function App() {
               continue;
             }
 
-            try {
-              const result = await callTauriTool(toolName, toolArgs);
+            if (toolName === 'run_command' && isDangerousCommand(toolArgs.command)) {
+              setPendingToolCall({ toolName, toolArgs });
               
+              while (pendingToolCall !== null) {
+                await new Promise(resolve => setTimeout(resolve, 50));
+              }
+              
+              if (confirmedToolCall === false) {
+                return { cancelled: true, reason: 'USER_CANCELLED' };
+              }
+            }
+
+            let result = null;
+            let lastError = null;
+
+            try {
+              result = await callTauriTool(toolName, toolArgs);
+            } catch (error) {
+              console.error(`工具 ${toolName} 执行失败:`, error);
+              
+              setMessages(prev => [
+                ...prev,
+                { 
+                  id: Date.now(), 
+                  sender: "tool", 
+                  text: `❌ 工具 ${toolName} 执行失败: ${error.message}` 
+                }
+              ]);
+
+              lastError = error;
+
+              if (lastError.message === 'CANCELLED') {
+                messagesToSend = [
+                  ...messagesToSend,
+                  {
+                    role: "assistant",
+                    content: fullResponse,
+                    tool_calls: [toolCall]
+                  },
+                  {
+                    role: "tool",
+                    name: toolName,
+                    content: `Tool execution was cancelled by the user.`
+                  }
+                ];
+              } else {
+                messagesToSend = [
+                  ...messagesToSend,
+                  {
+                    role: "assistant",
+                    content: fullResponse,
+                    tool_calls: [toolCall]
+                  },
+                  {
+                    role: "tool",
+                    name: toolName,
+                    content: `The tool failed with error: ${lastError.message}. Try a different approach or explain why it failed.`
+                  }
+                ];
+              }
+
+              continue;
+            }
+
+            if (result) {
               setMessages(prev => [
                 ...prev,
                 { 
@@ -253,31 +331,6 @@ export default function App() {
                   role: "tool",
                   name: toolName,
                   content: JSON.stringify(result)
-                }
-              ];
-            } catch (error) {
-              console.error(`工具 ${toolName} 执行失败:`, error);
-              
-              setMessages(prev => [
-                ...prev,
-                { 
-                  id: Date.now(), 
-                  sender: "tool", 
-                  text: `❌ 工具 ${toolName} 执行失败: ${error.message}` 
-                }
-              ]);
-
-              messagesToSend = [
-                ...messagesToSend,
-                {
-                  role: "assistant",
-                  content: fullResponse,
-                  tool_calls: [toolCall]
-                },
-                {
-                  role: "tool",
-                  name: toolName,
-                  content: `Error: ${error.message}`
                 }
               ];
             }
@@ -532,6 +585,90 @@ export default function App() {
     </div>
   );
 
+  const ConfirmationDialog = () => {
+    if (!pendingToolCall) return null;
+    
+    const handleConfirm = (confirmed) => {
+      setConfirmedToolCall(confirmed ? pendingToolCall : false);
+      setPendingToolCall(null);
+    };
+
+    const command = pendingToolCall.toolArgs.command || '';
+    
+    return (
+      <div style={{
+        position: 'fixed',
+        top: 0, left: 0, right: 0, bottom: 0,
+        background: 'rgba(12,12,20,0.85)',
+        backdropFilter: 'blur(6px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 4000
+      }}>
+        <div style={{
+          background: '#2d2f46',
+          borderRadius: '20px',
+          padding: '40px',
+          width: '500px',
+          maxWidth: '90%',
+          boxShadow: '0 12px 48px rgba(0,0,0,0.6), inset 1px 0 0 rgba(255,255,255,0.05)',
+          border: '1px solid #3e415c'
+        }}>
+           <h2 style={{ marginBottom: '20px', fontSize: '22px', background: 'linear-gradient(135deg, #ffffff 0%, #a9b1d6 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>⚠️ 确认危险操作</h2>
+          <p style={{ color: '#ef4444', marginBottom: '24px', fontSize: '15px' }}>
+            AI 想要执行以下危险命令，这可能造成数据丢失或系统损坏：
+          </p>
+          
+          <div style={{
+            marginBottom: '30px',
+            padding: '20px 24px',
+            background: 'rgba(239,68,68,0.1)',
+            borderRadius: '12px',
+            borderLeft: '4px solid #ef4444'
+          }}>
+            <code style={{ color: '#a9b1d6', fontFamily: '"Fira Code", "Consolas", monospace' }}>{command}</code>
+          </div>
+
+          <p style={{ color: '#a9b1d6', marginBottom: '32px', fontSize: '14px', lineHeight: 1.5 }}>
+            是否继续执行？如果不确定，请取消操作。
+          </p>
+
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+            <button
+              onClick={() => handleConfirm(false)}
+              style={{
+                padding: '12px 32px',
+                borderRadius: '8px',
+                border: 'none',
+                background: '#3e415c',
+                color: '#a9b1d6',
+                cursor: 'pointer',
+                fontSize: '15px'
+              }}
+            >
+              取消
+            </button>
+            <button
+              onClick={() => handleConfirm(true)}
+              style={{
+                padding: '12px 32px',
+                borderRadius: '8px',
+                background: '#ef4444',
+                color: 'white',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '15px'
+              }}
+            >
+              继续执行
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
    // 欢迎向导
   const WelcomeWizard = () => (
     <div style={{
@@ -591,11 +728,13 @@ export default function App() {
     </div>
   );
 
-  return (
-    <div className="ai-sidebar" style={{ display: show ? "flex" : "none" }}>
-      {showAbout && <AboutDialog />}
-      {showSettings && <SettingsModal />}
-      {showWelcome && <WelcomeWizard />}
+    return (
+      <div className="ai-sidebar" style={{ display: show ? "flex" : "none" }}>
+        {showAbout && <AboutDialog />}
+        {showSettings && <SettingsModal />}
+        {showWelcome && <WelcomeWizard />}
+        {pendingToolCall && <ConfirmationDialog />}
+
       {contextMenu.visible && (
         <div
           style={{
