@@ -75,17 +75,20 @@ fn main() {
       }
     })
     .setup(|app| {
-      let _shortcut = app
-        .register_global_shortcut("Super+Shift+Space", |app, _, _| {
-          let window = app.get_webview_window("ai-sidebar").unwrap();
-          if window.is_visible().unwrap() {
-            window.hide().unwrap();
-          } else {
-            window.show().unwrap();
-            window.set_focus().unwrap();
-          }
-        })
-        .expect("Failed to register global shortcut");
+      let _ = app.global_shortcut().on_shortcut("Super+Shift+Space", move |app, _, event| {
+        match event.state() {
+            tauri_plugin_global_shortcut::ShortcutState::Pressed => {
+              let window = app.get_webview_window("ai-sidebar").unwrap();
+              if window.is_visible().unwrap() {
+                window.hide().unwrap();
+              } else {
+                window.show().unwrap();
+                window.set_focus().unwrap();
+              }
+            }
+            _ => {}
+        }
+      });
 
       TrayIconBuilder::new()
         .icon(app.default_window_icon().unwrap().clone())
