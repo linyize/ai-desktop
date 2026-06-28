@@ -10,6 +10,187 @@ function isDangerousCommand(command) {
   return false;
 }
 
+function StepMessage({ message, mode }) {
+  const { steps } = message;
+  
+  if (mode !== 'teach' || !steps || steps.length === 0) {
+    return null;
+  }
+
+    return (
+      <div style={{
+        marginTop: '12px',
+        padding: '16px',
+        background: 'rgba(50, 52, 74, 0.8)',
+        borderRadius: '12px'
+      }}>
+        {steps.map((step, idx) => {
+          const stepStatus = step;
+          
+          return (
+            <div key={idx} style={{
+              padding: '16px',
+              marginBottom: '12px',
+              background: idx === 0 && stepStatus.status === 'pending' 
+                ? 'rgba(54, 87, 197, 0.1)' 
+                : stepStatus.status === 'executing'
+                  ? 'rgba(54, 87, 197, 0.2)'
+                  : stepStatus.status === 'done'
+                    ? 'rgba(39, 174, 96, 0.1)'
+                    : stepStatus.status === 'skipped'
+                      ? 'rgba(189, 195, 199, 0.1)'
+                      : stepStatus.status === 'failed'
+                        ? 'rgba(231, 76, 60, 0.1)'
+                        : '#3e415c',
+              borderRadius: '8px',
+              borderLeft: idx === 0 && stepStatus.status === 'pending'
+                ? '4px solid #667eea'
+                : stepStatus.status === 'done'
+                  ? '4px solid #27ae60'
+                  : stepStatus.status === 'skipped'
+                    ? '4px solid #95a5a6'
+                    : stepStatus.status === 'failed'
+                      ? '4px solid #e74c3c'
+                      : '4px solid #3e415c',
+              animation: idx === 0 && stepStatus.status !== 'pending' 
+                ? 'none' 
+                : undefined
+            }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              marginBottom: '8px'
+            }}>
+              <span style={{
+                fontSize: '12px',
+                fontWeight: 600,
+                color: idx === 0 && stepStatus.status === 'pending' ? '#667eea' : '#a9b1d6',
+                background: idx === 0 && stepStatus.status === 'pending'
+                  ? 'rgba(102, 126, 234, 0.15)'
+                  : undefined,
+                padding: '2px 8px',
+                borderRadius: '4px'
+              }}>
+                {idx + 1}
+              </span>
+              <span style={{
+                fontSize: '14px',
+                color: stepStatus.status === 'failed' ? '#e74c3c' : '#a9b1d6',
+                lineHeight: 1.5
+              }}>
+                {step.text}
+              </span>
+            </div>
+            
+            {(stepStatus.status === 'pending' || stepStatus.status === 'executing') && (
+              <div style={{
+                display: 'flex',
+                gap: '8px',
+                marginTop: '8px'
+              }}>
+                <button
+                  onClick={() => {
+                    const event = new CustomEvent('executeStep', { detail: { idx } });
+                    window.dispatchEvent(event);
+                  }}
+                  disabled={stepStatus.status === 'executing'}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '4px',
+                    border: 'none',
+                    background: stepStatus.status === 'pending' ? '#667eea' : '#3e415c',
+                    color: 'white',
+                    fontSize: '12px',
+                    cursor: stepStatus.status === 'executing' ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  {stepStatus.status === 'pending' ? '执行' : '执行中...'}
+                </button>
+                
+                <button
+                  onClick={() => {
+                    const event = new CustomEvent('skipStep', { detail: { idx } });
+                    window.dispatchEvent(event);
+                  }}
+                  disabled={stepStatus.status === 'executing'}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '4px',
+                    border: 'none',
+                    background: stepStatus.status === 'pending' ? '#3e415c' : '#95a5a6',
+                    color: '#a9b1d6',
+                    fontSize: '12px',
+                    cursor: stepStatus.status === 'executing' ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  跳过
+                </button>
+                
+                <button
+                  onClick={() => {
+                    const event = new CustomEvent('explainStep', { detail: { text: step.text } });
+                    window.dispatchEvent(event);
+                  }}
+                  disabled={stepStatus.status === 'executing'}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '4px',
+                    border: 'none',
+                    background: stepStatus.status === 'pending' ? '#7f8c8d' : '#95a5a6',
+                    color: '#ecf0f1',
+                    fontSize: '12px',
+                    cursor: stepStatus.status === 'executing' ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  说明
+                </button>
+              </div>
+            )}
+            
+            {stepStatus.status === 'done' && (
+              <span style={{
+                fontSize: '12px',
+                color: '#27ae60',
+                padding: '4px 8px',
+                background: 'rgba(39, 174, 96, 0.15)',
+                borderRadius: '4px'
+              }}>
+                ✓ 已完成
+              </span>
+            )}
+            
+            {stepStatus.status === 'skipped' && (
+              <span style={{
+                fontSize: '12px',
+                color: '#95a5a6',
+                padding: '4px 8px',
+                background: 'rgba(149, 165, 166, 0.15)',
+                borderRadius: '4px'
+              }}>
+                ↪ 已跳过
+              </span>
+            )}
+            
+            {stepStatus.status === 'failed' && (
+              <span style={{
+                fontSize: '12px',
+                color: '#e74c3c',
+                padding: '4px 8px',
+                background: 'rgba(231, 76, 60, 0.15)',
+                borderRadius: '4px'
+              }}>
+                ✗ 失败
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 async function callTauriTool(toolName, toolArgs, onConfirm = null) {
   const payload = {
     cmd: toolName,
@@ -60,6 +241,8 @@ export default function App() {
   const [confirmedToolCall, setConfirmedToolCall] = useState(null);
   const [pendingToolCall, setPendingToolCall] = useState(null);
   const [retryCounts, setRetryCounts] = useState({});
+  const [steps, setSteps] = useState([]);
+  const [currentStepIndex, setCurrentStepIndex] = useState(-1);
 
   const tools = [
     {
@@ -124,6 +307,10 @@ export default function App() {
     setMode(newMode);
     localStorage.setItem('ai_mode', newMode);
     setSystemPrompt(getModePrompt(newMode));
+    if (newMode !== 'teach') {
+      setSteps([]);
+      setCurrentStepIndex(-1);
+    }
   };
   const chatRef = useRef(null);
 
@@ -152,8 +339,71 @@ export default function App() {
     }
   }, []);
 
+  useEffect(() => {
+    const handleExecute = (e) => {
+      e.stopPropagation();
+      if (mode !== 'teach') return;
+      
+      const { idx } = e.detail;
+      setSteps(prevSteps => {
+        if (idx < 0 || idx >= prevSteps.length) return prevSteps;
+        
+        setCurrentStepIndex(idx);
+        
+        const step = prevSteps[idx];
+        if (!step || !step.toolCall) return prevSteps;
+        
+        executeStep(idx, step.toolCall).then(() => {
+          setSteps(currentSteps => {
+            currentSteps[idx] = { ...currentSteps[idx], status: 'done' };
+            
+            if (idx < currentSteps.length - 1) {
+              const nextIdx = idx + 1;
+              setCurrentStepIndex(nextIdx);
+              
+              return currentSteps.map((s, i) =>
+                i === nextIdx ? { ...s, status: 'pending' } : s
+              );
+            }
+            
+            return [...currentSteps];
+          });
+        }).catch(() => {
+          console.error('Execution failed');
+        });
+        
+        return prevSteps.map((s, i) =>
+          i === idx ? { ...s, status: 'executing' } : s
+        );
+      });
+    };
+
+    const handleSkip = (e) => {
+      e.stopPropagation();
+      if (mode !== 'teach') return;
+      
+      const { idx } = e.detail;
+      setSteps(prevSteps => prevSteps.map((s, i) =>
+        i === idx ? { ...s, status: 'skipped' } : s
+      ));
+    };
+
+    window.addEventListener('executeStep', handleExecute);
+    window.addEventListener('skipStep', handleSkip);
+
+    return () => {
+      window.removeEventListener('executeStep', handleExecute);
+      window.removeEventListener('skipStep', handleSkip);
+    };
+  }, [mode]);
+
   const handleSend = async () => {
     if (!input.trim()) return;
+
+    if (mode === 'teach' && currentStepIndex >= 0 && currentStepIndex < steps.length) {
+      await executeCurrentStep();
+      return;
+    }
 
     const userMsg = { id: Date.now(), sender: "user", text: input.trim() };
     setMessages(prev => [...prev, userMsg]);
@@ -379,6 +629,42 @@ export default function App() {
           continue;
         }
 
+        if (mode === 'teach' && fullResponse.trim()) {
+          const stepPattern = /(\d+)\.\s+(.+?)(?=\n\d+\.|\n\n|$)/g;
+          let match;
+          const parsedSteps = [];
+          
+          while ((match = stepPattern.exec(fullResponse)) !== null) {
+            parsedSteps.push({
+              number: parseInt(match[1]),
+              text: match[2].trim(),
+              status: 'pending'
+            });
+          }
+
+          if (parsedSteps.length > 0 && toolCalls) {
+            toolCalls.forEach((tc, idx) => {
+              if (idx < parsedSteps.length) {
+                parsedSteps[idx] = { ...parsedSteps[idx], toolCall: tc };
+              }
+            });
+          }
+
+          if (parsedSteps.length > 0) {
+            setSteps(parsedSteps);
+            setCurrentStepIndex(0);
+            
+            const stepMsg = { 
+              id: Date.now(), 
+              sender: "ai", 
+              text: fullResponse,
+              steps: parsedSteps
+            };
+            
+            setMessages(prev => [...prev, stepMsg]);
+          }
+        }
+
         break;
       }
     } catch (error) {
@@ -416,6 +702,80 @@ export default function App() {
     const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', newTheme);
     localStorage.setItem('theme', newTheme);
+  };
+
+  const executeStep = async (stepIndex, toolCall) => {
+    if (!toolCall || !toolCall.function || !toolCall.function.arguments) return;
+    
+    setSteps(prevSteps => prevSteps.map((s, i) => 
+      i === stepIndex ? { ...s, status: 'executing' } : s
+    ));
+    
+    try {
+      const toolArgs = JSON.parse(toolCall.function.arguments);
+      const result = await callTauriTool(
+        toolCall.function.name,
+        toolArgs
+      );
+      
+      setSteps(prevSteps => prevSteps.map((s, i) => 
+        i === stepIndex ? { ...s, status: 'done' } : s
+      ));
+      
+      if (stepIndex < steps.length - 1 && mode === 'teach') {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const nextStep = steps[stepIndex + 1];
+        setSteps(prevSteps => prevSteps.map((s, i) =>
+          i === stepIndex + 1 ? { ...s, status: 'pending' } : s
+        ));
+      }
+      
+      return result;
+    } catch (error) {
+      console.error(`Step ${stepIndex} failed:`, error);
+      
+      setSteps(prevSteps => prevSteps.map((s, i) =>
+        i === stepIndex ? { ...s, status: 'failed' } : s
+      ));
+      
+      throw error;
+    }
+  };
+
+  const skipStep = (stepIndex) => {
+    setSteps(prevSteps => prevSteps.map((s, i) =>
+      i === stepIndex ? { ...s, status: 'skipped' } : s
+    ));
+    
+    if (stepIndex < steps.length - 1 && mode === 'teach') {
+      const nextStep = steps[stepIndex + 1];
+      setSteps(prevSteps => prevSteps.map((s, i) =>
+        i === stepIndex + 1 ? { ...s, status: 'pending' } : s
+      ));
+    }
+  };
+
+  const executeCurrentStep = async () => {
+    if (currentStepIndex < 0 || currentStepIndex >= steps.length) return;
+    
+    setSteps(prevSteps => prevSteps.map((s, i) =>
+      i === currentStepIndex ? { ...s, status: 'executing' } : s
+    ));
+    
+    try {
+      const step = steps[currentStepIndex];
+      if (step && step.toolCall) {
+        await executeStep(currentStepIndex, step.toolCall);
+      }
+      
+      setSteps(prevSteps => prevSteps.map((s, i) =>
+        i === currentStepIndex ? { ...s, status: 'done' } : s
+      ));
+      
+      setCurrentStepIndex(prev => prev + 1);
+    } catch (error) {
+      console.error('Step execution failed:', error);
+    }
   };
 
   const closeError = () => setError(null);
@@ -919,9 +1279,18 @@ export default function App() {
       </div>
       <div className="chat-area" ref={chatRef}>
         {messages.map((msg) => (
-          <div key={msg.id} className={`message ${msg.sender}`}>
+          <div key={`${msg.id}`} className={`message ${msg.sender}`}>
             <span className="avatar">{msg.sender === "ai" ? "🤖" : "👤"}</span>
-            <div className="bubble">{msg.text}</div>
+            <div className="bubble">
+              {mode === 'teach' && msg.steps ? (
+                <>
+                  <StepMessage message={msg} mode={mode} />
+                  <p style={{ color: '#a9b1d6', marginBottom: 0 }}>{msg.text}</p>
+                </>
+              ) : (
+                msg.text
+              )}
+            </div>
           </div>
         ))}
         {error && (
