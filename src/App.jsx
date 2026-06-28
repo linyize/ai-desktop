@@ -59,6 +59,7 @@ export default function App() {
   const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0 });
   const [confirmedToolCall, setConfirmedToolCall] = useState(null);
   const [pendingToolCall, setPendingToolCall] = useState(null);
+  const [retryCounts, setRetryCounts] = useState({});
 
   const tools = [
     {
@@ -236,6 +237,7 @@ export default function App() {
 
         if (toolCalls && toolCalls.length > 0) {
           for (const toolCall of toolCalls) {
+            const toolId = toolCall.id;
             const toolName = toolCall.function.name;
             let toolArgs = {};
             
@@ -261,17 +263,49 @@ export default function App() {
             let result = null;
             let lastError = null;
 
+            const retryCount = retryCounts[toolId] || 0;
+
             try {
               result = await callTauriTool(toolName, toolArgs);
             } catch (error) {
               console.error(`工具 ${toolName} 执行失败:`, error);
               
+              if (retryCount >= 1) {
+                setMessages(prev => [
+                  ...prev,
+                  { 
+                    id: Date.now(), 
+                    sender: "tool", 
+                    text: `❌ 工具 ${toolName} 执行失败: ${error.message}` 
+                  }
+                ]);
+                
+                setError(error.message || '工具执行失败');
+                
+                messagesToSend = [
+                  ...messagesToSend,
+                  {
+                    role: "assistant",
+                    content: fullResponse,
+                    tool_calls: [toolCall]
+                  },
+                  {
+                    role: "tool",
+                    name: toolName,
+                    content: `Error: ${error.message}`
+                  }
+                ];
+                
+                setRetryCounts(prev => ({ ...prev, [toolId]: retryCount + 1 }));
+                continue;
+              }
+
               setMessages(prev => [
                 ...prev,
                 { 
                   id: Date.now(), 
                   sender: "tool", 
-                  text: `❌ 工具 ${toolName} 执行失败: ${error.message}` 
+                    text: `❌ 工具 ${toolName} 执行失败，正在重试...` 
                 }
               ]);
 
@@ -300,15 +334,21 @@ export default function App() {
                     tool_calls: [toolCall]
                   },
                   {
-                    role: "tool",
-                    name: toolName,
-                    content: `The tool failed with error: ${lastError.message}. Try a different approach or explain why it failed.`
+                    role: "user",
+                    content: `The tool ${toolName} failed: ${lastError.message}. Try a different approach.`
                   }
                 ];
               }
 
+              setRetryCounts(prev => ({ ...prev, [toolId]: retryCount + 1 }));
               continue;
             }
+
+            setRetryCounts(prev => {
+              const newCounts = { ...prev };
+              delete newCounts[toolId];
+              return newCounts;
+            });
 
             if (result) {
               setMessages(prev => [
