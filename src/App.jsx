@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 export default function App() {
   const [show, setShow] = useState(true);
   const [input, setInput] = useState("");
+  const [mode, setMode] = useState("teach");
   const [messages, setMessages] = useState([
     { id: 1, sender: "ai", text: "你好！我是你的 AI 助手。需要什么帮助？" }
   ]);
@@ -14,10 +15,32 @@ export default function App() {
     apiUrl: localStorage.getItem('api_url') || ''
   });
   const [showWelcome, setShowWelcome] = useState(!localStorage.getItem('ai_provider'));
+  const [systemPrompt, setSystemPrompt] = useState(getModePrompt("teach"));
   const [error, setError] = useState(null);
+
+  const getModePrompt = (mode) => {
+    const prompts = {
+      teach: "你是一个耐心的 AI 教师，擅长用简洁明了的方式讲解知识点，提供示例代码和最佳实践。",
+      auto: "你是一个高效的 AI 编程助手，专注于自动完成编程任务、生成代码、修复 bug 和优化实现。直接给出解决方案。",
+      monitor: "你是一个系统监控专家，负责分析日志、诊断问题、提供运维建议，并帮助理解系统状态。"
+    };
+    return prompts[mode] || prompts.teach;
+  };
+
+  const handleModeChange = (newMode) => {
+    setMode(newMode);
+    localStorage.setItem('ai_mode', newMode);
+    setSystemPrompt(getModePrompt(newMode));
+  };
   const chatRef = useRef(null);
 
   useEffect(() => {
+    const savedMode = localStorage.getItem('ai_mode');
+    if (savedMode && ['teach', 'auto', 'monitor'].includes(savedMode)) {
+      setMode(savedMode);
+      setSystemPrompt(getModePrompt(savedMode));
+    }
+    
     // 开始->被ana的热启动调用，activate时直接focus到前端
     import("@tauri-apps/plugin-shell")
       .then((module) => module.listenShortcut({ combo: "Super+Space" }))
@@ -27,7 +50,7 @@ export default function App() {
     if (chatRef.current) {
       chatRef.current.scrollTop = chatRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, []);
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -41,7 +64,11 @@ export default function App() {
     try {
       const apiUrl = settings.apiUrl || 'http://127.0.0.1:8082/v1/chat/completions';
       const model = 'coder-next';
-      const messagesToSend = [...messages, userMsg].map(m => ({
+      const messagesToSend = [
+        { role: "system", content: systemPrompt },
+        ...messages,
+        userMsg
+      ].map(m => ({
         role: m.sender === "user" ? "user" : "assistant",
         content: m.text
       }));
@@ -327,6 +354,41 @@ export default function App() {
       <div className="header">
         <span className="logo">🤖</span>
         <span className="title">AI Desktop</span>
+        
+        <div style={{
+          display: 'flex',
+          background: 'rgba(255,255,255,0.1)',
+          borderRadius: '8px',
+          padding: '4px',
+          margin: '0 12px'
+        }}>
+          {[
+            { id: 'teach', label: 'Teach', icon: '📚' },
+            { id: 'auto', label: 'Auto', icon: '⚙️' },
+            { id: 'monitor', label: 'Monitor', icon: '👁️' }
+          ].map((m) => (
+            <button
+              key={m.id}
+              onClick={() => handleModeChange(m.id)}
+              style={{
+                background: mode === m.id ? '#667eea' : 'transparent',
+                color: mode === m.id ? 'white' : '#ccc',
+                border: 'none',
+                padding: '6px 12px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '13px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              <span>{m.icon}</span>
+              {m.label}
+            </button>
+          ))}
+        </div>
+        
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <span className="status-dot" style={{ background: error ? '#e74c3c' : '#27ae60' }} title={error ? '错误' : '在线'} />
           <button

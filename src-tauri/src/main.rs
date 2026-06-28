@@ -7,7 +7,7 @@ use tauri::{command, WindowEvent};
 fn run_command(command: String) -> Result<String, String> {
   let output = Command::new("sh")
     .arg("-c")
-    &command
+    .arg(command)
     .output()
     .map_err(|e| e.to_string())?;
 
@@ -22,7 +22,7 @@ fn run_command(command: String) -> Result<String, String> {
 fn take_screenshot() -> Result<String, String> {
   let output = Command::new("gnome-screenshot")
     .arg("-f")
-    &"/tmp/screenshot.png"
+    .arg("/tmp/screenshot.png")
     .output()
     .map_err(|e| e.to_string())?;
 
@@ -59,7 +59,7 @@ fn main() {
         _ => {}
       }
     })
-    .invoke_handler(tauri::generate_invoke_handler!(run_command, take_screenshot, read_dir))
+    .invoke_handler(tauri::generate_handler!(run_command, take_screenshot, read_dir))
     .run(tauri::generate_context!())
     .expect("error while running AI Desktop");
 }
