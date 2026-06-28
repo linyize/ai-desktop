@@ -1,7 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::process::Command;
-use tauri::{command, WindowEvent};
+use tauri::{command, Manager, tray::TrayIconBuilder, tray::TrayIconEvent, WindowEvent};
 
 #[command]
 fn run_command(command: String) -> Result<String, String> {
@@ -60,6 +60,21 @@ fn main() {
         }
         _ => {}
       }
+    })
+    .setup(|app| {
+      TrayIconBuilder::new()
+        .icon(app.default_window_icon().unwrap().clone())
+        .on_tray_icon_event(|tray, event| {
+          if let TrayIconEvent::Click { .. } = event {
+            let window = tray.app_handle().get_webview_window("ai-sidebar").unwrap();
+            window.show().unwrap();
+            window.set_focus().unwrap();
+          }
+        })
+        .build(app)
+        .unwrap();
+      
+      Ok(())
     })
     .invoke_handler(tauri::generate_handler!(run_command, take_screenshot, read_dir))
     .run(tauri::generate_context!())

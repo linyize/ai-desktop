@@ -17,6 +17,8 @@ export default function App() {
   const [showWelcome, setShowWelcome] = useState(!localStorage.getItem('ai_provider'));
   const [systemPrompt, setSystemPrompt] = useState(getModePrompt("teach"));
   const [error, setError] = useState(null);
+  const [showAbout, setShowAbout] = useState(false);
+  const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0 });
 
   const getModePrompt = (mode) => {
     const prompts = {
@@ -45,6 +47,13 @@ export default function App() {
     import("@tauri-apps/plugin-shell")
       .then((module) => module.listenShortcut({ combo: "Super+Space" }))
       .catch(() => { /* 自动隐藏 */ });
+    
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme && ['dark', 'light'].includes(savedTheme)) {
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    } else if (!savedTheme) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
     
     // 滚动到底部
     if (chatRef.current) {
@@ -155,50 +164,74 @@ export default function App() {
     alert('配置已保存！');
   };
 
+  const toggleDarkMode = () => {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+  };
+
   const closeError = () => setError(null);
 
-  // 简单设置弹窗
+  const showContextResponseMenu = (x, y) => {
+    setContextMenu({ visible: true, x, y });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenu({ visible: false, x: 0, y: 0 });
+  };
+
+  const handleRightClick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setShowSettings(true);
+  };
+
+   // 简单设置弹窗
   const SettingsModal = () => (
     <div style={{
       position: 'fixed',
       top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(0,0,0,0.5)',
+      background: 'rgba(12,12,20,0.85)',
+      backdropFilter: 'blur(6px)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 1000
     }}>
       <div style={{
-        background: 'white',
-        borderRadius: '16px',
-        padding: '30px',
-        width: '400px',
-        maxWidth: '90%'
+        background: '#2d2f46',
+        borderRadius: '20px',
+        padding: '40px',
+        width: '450px',
+        maxWidth: '90%',
+        boxShadow: '0 12px 48px rgba(0,0,0,0.6), inset 1px 0 0 rgba(255,255,255,0.05)',
+        border: '1px solid #3e415c'
       }}>
-        <h2 style={{ marginBottom: '20px' }}>⚙️ AI 设置</h2>
-        
+         <h2 style={{ marginBottom: '28px', fontSize: '22px', background: 'linear-gradient(135deg, #ffffff 0%, #a9b1d6 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>⚙️ AI 设置</h2>
+         
         <form onSubmit={handleSaveSettings}>
-          <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+          <div style={{ marginBottom: '18px' }}>
+            <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, fontSize: 14, color: '#a9b1d6' }}>
               AI 提供商
             </label>
             <select
               value={settings.provider}
               onChange={(e) => setSettings({...settings, provider: e.target.value})}
-              style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
+              style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', border: '1px solid #3e415c', background: '#1a1b2e', color: '#ffffff' }}
             >
-              <option value="mock">模拟（测试用）</option>
+               <option value="mock">模拟（测试用）</option>
               <option value="deepseek">DeepSeek</option>
               <option value="openai">OpenAI</option>
+              <option value="llama-cpp" selected>llama.cpp (本地)</option>
               <option value="ollama">Ollama (本地)</option>
-              <option value="llama-cpp">llama.cpp (本地)</option>
             </select>
           </div>
 
           {settings.provider !== 'mock' && (
             <>
-              <div style={{ marginBottom: '15px' }}>
-                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+              <div style={{ marginBottom: '18px' }}>
+                <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, fontSize: 14, color: '#a9b1d6' }}>
                   API Key
                 </label>
                 <input
@@ -206,12 +239,12 @@ export default function App() {
                   value={settings.apiKey}
                   onChange={(e) => setSettings({...settings, apiKey: e.target.value})}
                   placeholder="sk-***"
-                  style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
+                  style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', border: '1px solid #3e415c', background: '#1a1b2e', color: '#ffffff' }}
                 />
               </div>
 
-              <div style={{ marginBottom: '15px' }}>
-                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+              <div style={{ marginBottom: '18px' }}>
+                <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, fontSize: 14, color: '#a9b1d6' }}>
                   API URL
                 </label>
                 <input
@@ -219,7 +252,7 @@ export default function App() {
                   value={settings.apiUrl}
                   onChange={(e) => setSettings({...settings, apiUrl: e.target.value})}
                   placeholder="http://127.0.0.1:8082/v1/chat/completions"
-                  style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
+                  style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', border: '1px solid #3e415c', background: '#1a1b2e', color: '#ffffff' }}
                 />
               </div>
             </>
@@ -228,9 +261,11 @@ export default function App() {
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
             {error && (
               <span style={{
-                padding: '8px 16px',
-                color: '#e74c3c',
-                fontSize: '14px'
+                padding: '10px 16px',
+                background: 'rgba(239,68,68,0.1)',
+                color: '#ef4444',
+                fontSize: '14px',
+                borderRadius: '6px'
               }}>
                 错误：{error}
               </span>
@@ -239,9 +274,11 @@ export default function App() {
               type="button"
               onClick={() => setShowSettings(false)}
               style={{
-                padding: '8px 16px',
-                borderRadius: '6px',
-                border: '1px solid #ddd',
+                padding: '10px 24px',
+                borderRadius: '8px',
+                border: 'none',
+                background: '#3e415c',
+                color: '#a9b1d6',
                 cursor: 'pointer'
               }}
             >
@@ -250,8 +287,8 @@ export default function App() {
             <button
               type="submit"
               style={{
-                padding: '8px 16px',
-                borderRadius: '6px',
+                padding: '10px 24px',
+                borderRadius: '8px',
                 background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                 color: 'white',
                 border: 'none',
@@ -266,10 +303,10 @@ export default function App() {
         {error && (
           <div style={{ 
             marginTop: '15px', 
-            padding: '10px', 
-            background: '#fde8e8', 
-            borderRadius: '6px',
-            color: '#c0392b',
+            padding: '12px 16px', 
+            background: 'rgba(239,68,68,0.1)', 
+            borderRadius: '8px',
+            color: '#ef4444',
             fontSize: '14px'
           }}>
             {error}
@@ -280,8 +317,8 @@ export default function App() {
                 background: 'none', 
                 border: 'none', 
                 cursor: 'pointer', 
-                color: '#c0392b',
-                fontWeight: 'bold'
+                color: '#ef4444',
+                fontWeight: 600
               }}
             >
               ×
@@ -292,33 +329,85 @@ export default function App() {
     </div>
   );
 
-  // 欢迎向导
+  // About dialog
+  const AboutDialog = () => (
+    <div style={{
+      position: 'fixed',
+      top: 0, left: 0, right: 0, bottom: 0,
+      background: 'rgba(12,12,20,0.8)',
+      backdropFilter: 'blur(6px)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 2000
+    }}>
+      <div style={{
+        background: 'var(--bg-panel-dark)',
+        borderRadius: '24px',
+        padding: '48px',
+        width: '360px',
+        maxWidth: '90%',
+        boxShadow: '0 16px 64px rgba(0,0,0,0.7)'
+      }}>
+        <h3 style={{ fontSize: '28px', marginBottom: '16px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+          AI Desktop
+        </h3>
+        <p style={{ color: '#a9b1d6', marginBottom: '8px' }}>版本信息</p>
+        <div style={{ fontSize: '24px', fontWeight: 'bold', background: 'linear-gradient(135deg, #ffffff 0%, #a9b1d6 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+          v0.1.0
+        </div>
+        <p style={{ color: '#a9b1d6', fontSize: '14px', marginTop: '24px' }}>AI 桌面助手</p>
+        <button
+          onClick={() => setShowAbout(false)}
+          style={{
+            marginTop: '32px',
+            width: '100%',
+            padding: '12px 32px',
+            borderRadius: '8px',
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            color: 'white',
+            border: 'none',
+            fontSize: '15px',
+            fontWeight: 'bold',
+            cursor: 'pointer'
+          }}
+        >
+          关闭
+        </button>
+      </div>
+    </div>
+  );
+
+   // 欢迎向导
   const WelcomeWizard = () => (
     <div style={{
       position: 'fixed',
       top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(0,0,0,0.5)',
+      background: 'rgba(12,12,20,0.85)',
+      backdropFilter: 'blur(6px)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 1000
     }}>
       <div style={{
-        background: 'white',
-        borderRadius: '16px',
-        padding: '30px',
-        width: '400px',
-        maxWidth: '90%'
+        background: '#2d2f46',
+        borderRadius: '20px',
+        padding: '40px',
+        width: '450px',
+        maxWidth: '90%',
+        boxShadow: '0 12px 48px rgba(0,0,0,0.6), inset 1px 0 0 rgba(255,255,255,0.05)',
+        border: '1px solid #3e415c'
       }}>
-        <h2 style={{ marginBottom: '15px' }}>🤖 欢迎使用 AI Desktop</h2>
-        <p style={{ marginBottom: '20px', color: '#666' }}>
+         <h2 style={{ marginBottom: '16px', fontSize: '24px', background: 'linear-gradient(135deg, #ffffff 0%, #a9b1d6 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>🤖 欢迎使用 AI Desktop</h2>
+        <p style={{ marginBottom: '24px', color: '#a9b1d6' }}>
           在开始之前，请先配置你的 AI 接口。
         </p>
         
-        <div style={{ marginBottom: '20px', padding: '15px', background: '#f0f9ff', borderRadius: '8px' }}>
-          <h3 style={{ fontSize: '14px', marginBottom: '10px' }}>推荐配置：</h3>
-          <ul style={{ fontSize: '12px', color: '#666', margin: 0, paddingLeft: '20px' }}>
-            <li><strong>AI 提供商：</strong> Ollama</li>
+<div style={{ marginBottom: '28px', padding: '20px 24px', background: 'linear-gradient(135deg, rgba(102,126,234,0.1) 0%, rgba(118,75,162,0.1) 100%)', borderRadius: '16px' }}>
+          <h3 style={{ fontSize: '15px', marginBottom: '12px', color: '#ffffff', fontWeight: 600 }}>推荐配置：</h3>
+          <ul style={{ fontSize: '14px', color: '#a9b1d6', margin: 0, paddingLeft: '24px' }}>
+            <li><strong>AI 提供商：</strong> llama.cpp</li>
             <li><strong>API URL：</strong> http://127.0.0.1:8082/v1/chat/completions</li>
             <li><strong>API Key：</strong> （空）</li>
           </ul>
@@ -331,13 +420,15 @@ export default function App() {
           }}
           style={{
             width: '100%',
-            padding: '12px',
-            borderRadius: '8px',
+            padding: '16px',
+            borderRadius: '12px',
             background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
             color: 'white',
             border: 'none',
             fontSize: '16px',
-            cursor: 'pointer'
+            fontWeight: 600,
+            cursor: 'pointer',
+            boxShadow: '0 8px 24px rgba(102,126,234,0.35)'
           }}
         >
           开始配置
@@ -348,10 +439,75 @@ export default function App() {
 
   return (
     <div className="ai-sidebar" style={{ display: show ? "flex" : "none" }}>
+      {showAbout && <AboutDialog />}
       {showSettings && <SettingsModal />}
       {showWelcome && <WelcomeWizard />}
+      {contextMenu.visible && (
+        <div
+          style={{
+            position: 'fixed',
+            top: contextMenu.y,
+            left: contextMenu.x - 150,
+            background: 'rgba(26, 27, 46, 0.98)',
+            borderRadius: '12px',
+            padding: '8px 0',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+            zIndex: 3000,
+            minWidth: '160px'
+          }}
+          onClick={closeContextMenu}
+        >
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleDarkMode();
+              closeContextMenu();
+            }}
+            style={{
+              width: '100%',
+              padding: '12px 20px',
+              background: 'none',
+              border: 'none',
+              color: '#a9b1d6',
+              fontSize: '14px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            🌗 切换深色模式
+          </button>
+          <div style={{
+            height: '1px',
+            background: '#3e415c',
+            margin: '4px 0'
+          }} />
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowAbout(true);
+              closeContextMenu();
+            }}
+            style={{
+              width: '100%',
+              padding: '12px 20px',
+              background: 'none',
+              border: 'none',
+              color: '#a9b1d6',
+              fontSize: '14px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            ℹ️ 关于
+          </button>
+        </div>
+      )}
       
-      <div className="header">
+      <div className="header" onContextMenu={handleRightClick}>
         <span className="logo">🤖</span>
         <span className="title">AI Desktop</span>
         
@@ -389,10 +545,31 @@ export default function App() {
           ))}
         </div>
         
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
           <span className="status-dot" style={{ background: error ? '#e74c3c' : '#27ae60' }} title={error ? '错误' : '在线'} />
           <button
+            onClick={toggleDarkMode}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'white',
+              fontSize: '20px',
+              cursor: 'pointer',
+              padding: '4px 8px',
+              borderRadius: '6px',
+              transition: 'all 0.3s ease'
+            }}
+            title="切换深色模式"
+          >
+            🌗
+          </button>
+          <button
             onClick={() => setShowSettings(true)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              const rect = e.currentTarget.getBoundingClientRect();
+              showContextResponseMenu(rect.right, rect.top);
+            }}
             style={{
               background: 'transparent',
               border: 'none',
