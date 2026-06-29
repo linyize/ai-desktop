@@ -12,10 +12,6 @@ build/
 # Tauri
 src-tauri/target/
 src-tauri/gen/
-src-tauri/icons/*.png
-src-tauri/icons/*.svg
-src-tauri/icons/*.icns
-src-tauri/icons/*.ico
 
 # IDE
 .idea/
