@@ -946,39 +946,26 @@ export default function App() {
           <span className="title">AI Desktop</span>
         </div>
         
-        <div style={{
-          display: 'flex',
-          background: 'rgba(255,255,255,0.1)',
-          borderRadius: '8px',
-          padding: '4px',
-          margin: '0 12px'
-        }}>
-          {[
-            { id: 'teach', label: 'Teach', icon: '📚' },
-            { id: 'auto', label: 'Auto', icon: '⚙️' },
-            { id: 'monitor', label: 'Monitor', icon: '👁️' }
-          ].map((m) => (
-            <button
-              key={m.id}
-              onClick={() => handleModeChange(m.id)}
-              style={{
-                background: mode === m.id ? '#667eea' : 'transparent',
-                color: mode === m.id ? 'white' : '#ccc',
-                border: 'none',
-                padding: '6px 12px',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '13px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px'
-              }}
-            >
-              <span>{m.icon}</span>
-              {m.label}
-            </button>
-          ))}
-        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <select
+            value={mode}
+            onChange={(e) => handleModeChange(e.target.value)}
+            style={{
+              background: 'rgba(255,255,255,0.1)',
+              color: 'white',
+              border: 'none',
+              padding: '6px 10px',
+              borderRadius: '8px',
+              fontSize: '13px',
+              cursor: 'pointer',
+              outline: 'none',
+              width: '90px'
+            }}
+          >
+            <option value="teach" style={{ background: '#2d2f46', color: 'white' }}>📚 Teach</option>
+            <option value="auto" style={{ background: '#2d2f46', color: 'white' }}>⚙️ Auto</option>
+            <option value="monitor" style={{ background: '#2d2f46', color: 'white' }}>👁️ Monitor</option>
+          </select>
         
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
           <span className="status-dot" style={{ background: error ? '#e74c3c' : '#27ae60' }} title={error ? '错误' : '在线'} />
