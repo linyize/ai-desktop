@@ -42,7 +42,10 @@ export default function App() {
   const [settings, setSettings] = useState({
     provider: localStorage.getItem('ai_provider') || 'mock',
     apiKey: localStorage.getItem('api_key') || '',
-    apiUrl: localStorage.getItem('api_url') || ''
+    apiUrl: localStorage.getItem('api_url') || '',
+    voiceEnabled: localStorage.getItem('voice_enabled') === 'true',
+    voiceGatewayUrl: localStorage.getItem('voice_gateway_url') || 'http://127.0.0.1:8766',
+    voiceToken: localStorage.getItem('voice_token') || ''
   });
   const [showWelcome, setShowWelcome] = useState(!localStorage.getItem('ai_provider'));
   const [systemPrompt, setSystemPrompt] = useState(getModePrompt("teach"));
@@ -55,6 +58,9 @@ export default function App() {
   const [steps, setSteps] = useState([]);
   const [currentStepIndex, setCurrentStepIndex] = useState(-1);
   const [memoryData, setMemoryData] = useState({ os: "", settings: [], habits: [] });
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
 
   const tools = [
     {
@@ -855,6 +861,50 @@ export default function App() {
 
   const closeError = () => setError(null);
 
+  // 语音输入
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      audioChunksRef.current = [];
+      recorder.ondataavailable = e => audioChunksRef.current.push(e.data);
+      recorder.onstop = async () => {
+        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const formData = new FormData();
+        formData.append('audio', blob, 'voice.webm');
+        const headers = {};
+        if (settings.voiceToken) headers['Authorization'] = `Bearer ${settings.voiceToken}`;
+        try {
+          const res = await fetch(`${settings.voiceGatewayUrl}/v1/asr`, {
+            method: 'POST',
+            headers,
+            body: formData
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.text) setInput(data.text);
+          } else {
+            console.error('ASR 请求失败:', res.statusText);
+          }
+        } catch (err) {
+          console.error('ASR 请求出错:', err);
+        }
+        stream.getTracks().forEach(t => t.stop());
+      };
+      recorder.start();
+      setIsRecording(true);
+      mediaRecorderRef.current = recorder;
+    } catch (err) {
+      console.error('麦克风访问失败:', err);
+      setError('无法访问麦克风，请检查权限');
+    }
+  }
+
+  function stopRecording() {
+    mediaRecorderRef.current?.stop();
+    setIsRecording(false);
+  }
+
   const showContextResponseMenu = (x, y) => {
     setContextMenu({ visible: true, x, y });
   };
@@ -1056,6 +1106,16 @@ export default function App() {
           onKeyDown={handleKeyDown}
           disabled={isSending}
         />
+        {settings.voiceEnabled && (
+          <button
+            onClick={isRecording ? stopRecording : startRecording}
+            disabled={isSending}
+            className={isRecording ? "mic-btn recording" : "mic-btn"}
+            title={isRecording ? "停止录音" : "语音输入"}
+          >
+            🎤
+          </button>
+        )}
         <button onClick={handleSend} disabled={isSending}>
           {isSending ? "..." : "→"}
         </button>

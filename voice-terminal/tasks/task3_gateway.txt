@@ -1,0 +1,68 @@
+Create gateway.py in /home/lyz/.openclaw/workspace/ai-desktop/voice-terminal/.
+This is the MAIN ENTRY POINT of the voice gateway service.
+
+## Architecture
+gateway.py imports and uses: config.py, asr_engine.py, tts_engine.py, router.py, llm_client.py, audio_utils.py
+It provides two interfaces:
+1. WebSocket server on port 8765 — for Windows client audio streaming
+2. HTTP REST API on port 8766 — for status/config queries
+
+## WebSocket Protocol (JSON messages)
+
+Client -> Server:
+- {"type": "audio_start", "sample_rate": 16000, "format": "pcm16"}
+- {"type": "audio_chunk", "data": "<base64 pcm16 bytes>"}
+- {"type": "audio_end"}
+- {"type": "set_voice", "profile": "zh-CN-XiaoxiaoNeural"}
+- {"type": "set_model", "model": "local://coder-next:8082"}
+- {"type": "ping"}
+
+Server -> Client:
+- {"type": "status", "state": "idle|recording|asr|routing|llm|tts|speaking"}
+- {"type": "asr_result", "text": "recognized text"}
+- {"type": "model_selected", "model": "local://coder-next:8082", "name": "编程", "confidence": 0.9}
+- {"type": "tts_start", "format": "pcm16", "sample_rate": 24000}
+- {"type": "tts_chunk", "data": "<base64 pcm16 bytes>"}
+- {"type": "tts_end"}
+- {"type": "error", "message": "description"}
+- {"type": "pong"}
+
+## REST API
+- GET /v1/status -> {"state": "idle", "model": "coder-next", "clients": 1}
+- GET /v1/models -> ["local://coder-next:8082", "local://35b:8080", ...]
+- POST /v1/tts (JSON: {"text": "...", "voice": "..."}) -> returns audio/wav binary
+- POST /v1/asr (multipart file upload) -> {"text": "..."}
+- GET /v1/voices -> ["edge:zh-CN-XiaoxiaoNeural", "mosstts:default"]
+- GET /health -> {"status": "ok"}
+
+## Flow
+1. Client connects via WebSocket
+2. Client sends audio_start, then audio_chunk(s), then audio_end
+3. Server accumulates PCM16 chunks, saves to temp WAV
+4. Server calls ASREngine.transcribe() -> text
+5. Server calls Router.route(text) -> model_uri
+6. Server calls LLMClient.chat(model_uri, messages) -> response text
+7. Server calls TTSEngine.synthesize(response_text) -> audio bytes
+8. Server sends tts_start, tts_chunk, tts_end
+9. Client plays audio
+
+## Implementation requirements
+- Use asyncio + websockets library
+- Use http.server or aiohttp for REST API (keep it simple, don't add Flask/FastAPI deps)
+- Support multiple concurrent WebSocket clients
+- Each client session has its own state (audio buffer, conversation history, selected model/voice)
+- Conversation history is kept per-session (list of messages with roles)
+- Handle client disconnect gracefully (clean up temp files)
+- Log events with print() and timestamps
+- The server must handle the case where ASR/LLM/TTS components fail and return an error message to the client
+- Use base64 standard encoding for audio data in JSON
+
+## Entry point
+```python
+if __name__ == "__main__":
+    config = Config.load()
+    print(f"[Voice Gateway] Starting on ws://{config.host}:{config.ws_port} ...")
+    asyncio.run(main())
+```
+
+Make it well-structured with classes: GatewayServer (handles WebSocket + HTTP), Session (per-client state), VoiceGateway (ties all components together). Use English for all code and comments.

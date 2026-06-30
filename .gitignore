@@ -25,3 +25,9 @@ Thumbs.db
 
 # Files
 *.log
+
+# Python
+__pycache__/
+*.pyc
+voice-terminal/venv/
+voice-terminal/__pycache__/

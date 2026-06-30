@@ -1,0 +1,27 @@
+Create the following 2 files in /home/lyz/.openclaw/workspace/ai-desktop/voice-terminal/:
+
+### 1. router.py
+class Router:
+- __init__(self, routers_config: list): Accept list of router dicts from config.yaml (each has name, match_keywords, model, optional match_weight).
+- route(text: str) -> dict: Match user text against router rules. Return {"model": "local://coder-next:8082", "name": "编程", "confidence": 0.9}.
+  - If any keyword matches, return that router's model with confidence 1.0.
+  - If no keyword match, return the router with highest match_weight as fallback.
+  - If no fallback configured, return default "local://coder-next:8082".
+- get_models() -> list: Return list of all available model URIs.
+
+### 2. llm_client.py
+class LLMClient:
+- __init__(self): Support OpenAI-compatible endpoints (local llama.cpp and cloud APIs).
+- chat(model_uri: str, messages: list, stream: bool = False) -> str: Unified chat interface.
+  - Parse model_uri format: "local://coder-next:8082" or "cloud://deepseek" or "cloud://doubao".
+  - For local: http://127.0.0.1:{port}/v1/chat/completions, empty api_key.
+  - For cloud: Use environment variables for API keys (DEEPSEEK_API_KEY, DOUBAO_API_KEY, etc.).
+  - Support system prompt via messages[0]["role"] == "system".
+  - Return the assistant response text.
+  - Handle errors gracefully (connection refused, timeout -> return error message).
+- chat_stream(model_uri: str, messages: list) -> async generator: Async streaming version that yields text chunks.
+- get_available_models() -> dict: Return dict of model_uri -> readable name.
+
+Also add a section in config.yaml for cloud API keys (commented out with defaults).
+
+Import from config.py for settings. Use httpx or urllib for HTTP calls (no external deps apart from httpx if available, fallback to urllib).

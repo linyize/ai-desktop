@@ -1,0 +1,6 @@
+# Windows 客户端依赖
+pyaudio>=0.2.14
+websocket-client>=1.8.0
+keyboard>=0.13.5
+numpy>=1.26.0
+Pillow>=10.0.0

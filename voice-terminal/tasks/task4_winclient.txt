@@ -1,0 +1,97 @@
+Create win_client.py in /home/lyz/.openclaw/workspace/ai-desktop/voice-terminal/.
+This is a Windows GUI client that acts as a smart speaker.
+
+## Requirements
+- Python 3.10+ on Windows
+- Dependencies: pyaudio, websocket-client, keyboard, numpy, Pillow, base64 (stdlib)
+- Creates a simple system tray icon or a small floating window
+
+## Features
+
+### Voice Recording (Push-to-Talk)
+- **Hold Spacebar** to record from microphone
+- Release Spacebar to stop recording and send to server
+- Show visual feedback: a small overlay window with status text
+- Record at 16000 Hz, mono, PCM16 format
+- Send via WebSocket to the voice gateway
+
+### Audio Playback
+- Receive TTS audio from server and play immediately
+- Buffer incoming audio chunks and play sequentially
+
+### Status Display
+- Small overlay window (180x60px) showing current state:
+  - "🎤 录音中..." (recording)
+  - "🤖 思考中..." (processing)
+  - "🔊 播放中..." (speaking)
+  - "💤 待机" (idle)
+- Window is semi-transparent, always-on-top, positioned at bottom-right of screen
+
+### Keyboard Shortcuts
+- Space (hold): Record
+- Ctrl+Q: Quit
+- Ctrl+M: Cycle model (coder-next, 35b, deepseek)
+- Ctrl+V: Cycle voice (edge voices)
+
+### Configuration
+- Read from command line args or use defaults:
+  - --host: Server IP (default: 192.168.1.100)
+  - --port: WebSocket port (default: 8765)
+  - --device: Audio input device index (default: 0)
+
+## Implementation
+- Use threading for:
+  - Main thread: Tkinter overlay window
+  - Audio thread: PyAudio recording + playback
+  - Network thread: WebSocket client
+- WebSocket communication uses websocket-client library (synchronous)
+- Audio: Use PyAudio for both recording (InputStream) and playback (OutputStream)
+- For push-to-talk: keyboard library to detect Space key up/down
+- Connect to WebSocket on startup, reconnect on disconnect
+- Audio data flow:
+  1. Record PCM16 chunks (100ms frames)
+  2. Buffer locally while recording
+  3. On Space release: send audio_start, chunks, audio_end
+  4. Receive tts_start, tts_chunk(s), tts_end
+  5. Play received audio chunks via PyAudio OutputStream
+
+## Code structure
+- class VoiceClient: Main client class
+  - __init__(self, host, port)
+  - connect() -> Connect to WebSocket
+  - start_recording() -> Begin capturing mic
+  - stop_recording() -> Stop mic, send audio
+  - play_audio(pcm_data, sample_rate) -> Play audio
+  - send_json(data) -> Send JSON message
+  - recv_loop() -> Background thread for receiving messages
+  - set_model(model_uri) -> Switch model
+  - set_voice(voice_name) -> Switch voice
+  - run() -> Start the GUI and all threads
+
+- class StatusOverlay: Small tkinter window
+  - show_status(text) -> Update status text
+  - set_color(color) -> Background color based on state
+
+## Windows-specific notes
+- Use `import pyaudio` for audio (pip install pyaudio)
+- Use `import keyboard` for global hotkeys (pip install keyboard)  
+- Use `import tkinter as tk` for the overlay window
+- Set `root.attributes('-topmost', True)` for always-on-top
+- Set `root.overrideredirect(True)` for no title bar (floating overlay)
+- Use `root.wm_attributes('-transparentcolor', 'gray')` for transparency
+- Position window: `root.geometry(f'180x60+{screen_width-200}+{screen_height-80}')`
+
+## Startup
+```python
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--host", default="192.168.1.100", help="Voice gateway IP")
+    parser.add_argument("--port", type=int, default=8765, help="WebSocket port")
+    args = parser.parse_args()
+    
+    client = VoiceClient(args.host, args.port)
+    client.run()
+```
+
+Make it complete and functional. Handle disconnection gracefully (auto-reconnect). Use English for all code and comments.

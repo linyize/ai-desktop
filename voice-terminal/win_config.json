@@ -1,0 +1,7 @@
+{
+  "host": "192.168.1.100",
+  "port": 8765,
+  "retry_max": 30,
+  "retry_interval": 3,
+  "voice": "default"
+}

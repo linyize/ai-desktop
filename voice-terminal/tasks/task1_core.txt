@@ -1,0 +1,30 @@
+Create the following 4 files in /home/lyz/.openclaw/workspace/ai-desktop/voice-terminal/:
+
+### 1. config.py
+Load YAML config from config.yaml in the same directory. Provide a global Config object with typed fields matching config.yaml. Use dataclass or SimpleNamespace. Fields: host, ws_port, http_port, audio (sample_rate, channels, frame_ms), asr (engine, model, language), routers (list of name, match_keywords, model), tts (default_engine, edge.voice, mosstts.ref_audio, mosstts.ref_text, mosstts.use_gpu, fallback_engine), status fields.
+
+### 2. audio_utils.py
+Utility functions for audio processing:
+- pcm16_to_wav(pcm_bytes: bytes, sample_rate: int = 16000) -> bytes: Wrap raw PCM16 mono bytes in a WAV header, return complete WAV bytes.
+- wav_to_pcm16(wav_bytes: bytes) -> bytes: Strip WAV header, return raw PCM16.
+- normalize_volume(pcm_bytes: bytes, target_db: float = -3.0) -> bytes: Simple peak normalization.
+- save_audio(pcm_bytes: bytes, path: str, sample_rate: int = 16000): Save PCM16 bytes as WAV file.
+- read_audio(path: str) -> tuple[bytes, int]: Read WAV file, return (pcm16_bytes, sample_rate).
+
+### 3. asr_engine.py
+class ASREngine:
+- __init__(self, model: str = "tiny", language: str = "zh")
+- transcribe(audio_pcm: bytes, sample_rate: int = 16000) -> dict: Take PCM16 audio bytes, save to temp WAV, run `whisper` CLI, parse JSON output. Return {"text": "...", "segments": [...]}. Handle whisper not installed error gracefully.
+- transcribe_file(wav_path: str) -> dict: Transcribe a WAV file directly.
+Use subprocess to call the system `whisper` command with --output-format json. Use the model version from config.
+
+### 4. tts_engine.py
+class TTSEngine:
+- __init__(self, engine: str = "edge", edge_voice: str = "zh-CN-XiaoxiaoNeural")
+- synthesize(text: str) -> tuple[bytes, int]: Generate TTS audio. Return (pcm16_bytes, sample_rate).
+  - Edge-TTS: Use `edge-tts` Python library (pip install edge-tts). Async. Generate to temp file, read back as PCM16 WAV.
+  - Fallback: Print "TTS unavailable" and return empty bytes.
+- synthesize_to_file(text: str, path: str) -> str: Save TTS to WAV file.
+- set_voice(voice: str): Change voice.
+
+Make each file well-structured with docstrings and error handling. Use standard library only except edge-tts for TTS (catch ImportError gracefully). Follow PEP8. Use English for code and comments. Each file should be importable standalone.

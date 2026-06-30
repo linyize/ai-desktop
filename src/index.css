@@ -539,6 +539,40 @@ body {
   transform: none;
 }
 
+/* 麦克风按钮样式 */
+.ai-sidebar .input-area .mic-btn {
+  width: 52px;
+  height: 52px;
+  border: none;
+  border-radius: 8px;
+  background: var(--bg-dark);
+  color: var(--text-secondary-dark);
+  font-size: 22px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-right: 4px;
+}
+
+.ai-sidebar .input-area .mic-btn:hover:not(:disabled) {
+  background: #3e415c;
+  color: #ffffff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.ai-sidebar .input-area .mic-btn.recording {
+  background: #e74c3c;
+  color: #ffffff;
+  animation: mic-pulse 1s ease-in-out infinite;
+  box-shadow: 0 0 20px rgba(231, 76, 60, 0.6);
+}
+
+@keyframes mic-pulse {
+  0% { box-shadow: 0 0 8px rgba(231, 76, 60, 0.4); transform: scale(1); }
+  50% { box-shadow: 0 0 24px rgba(231, 76, 60, 0.8); transform: scale(1.08); }
+  100% { box-shadow: 0 0 8px rgba(231, 76, 60, 0.4); transform: scale(1); }
+}
+
 /* 深色模式相关样式 */
 [data-theme="light"] {
   --bg-dark: #f0f2f5;

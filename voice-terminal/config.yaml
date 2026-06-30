@@ -1,0 +1,59 @@
+# AI Voice Terminal — 网关配置
+host: "0.0.0.0"
+ws_port: 8765
+http_port: 8766
+
+# 音频参数
+audio:
+  sample_rate: 16000
+  channels: 1
+  frame_ms: 100           # 推流帧时长
+
+# ASR (Whisper)
+asr:
+  engine: "whisper"       # whisper | api
+  model: "tiny"           # tiny | base | small (local)
+  language: "zh"
+
+# LLM 路由
+routers:
+  - name: "编程"
+    match_keywords: ["写代码", "写程序", "写个", "bug", "函数", "重构", "git", "push", "commit", "coding"]
+    model: "local://coder-next:8082"
+  
+  - name: "系统操作"
+    match_keywords: ["帮我", "执行", "安装", "删除", "关机", "重启", "终端"]
+    model: "hermes://execute"
+
+  - name: "隐私"
+    match_keywords: ["密码", "私钥", "token", "密钥"]
+    model: "local://35b:8080"
+
+  - name: "闲聊"              # 兜底
+    match_weight: 0.8
+    model: "local://coder-next:8082"
+
+# TTS
+tts:
+  default_engine: "edge"    # edge | mosstts | chattts
+  edge:
+    voice: "zh-CN-XiaoxiaoNeural"
+  mosstts:
+    ref_audio: "speaker_profiles/default.wav"
+    ref_text: ""
+    use_gpu: false
+  fallback_engine: "edge"
+
+# 硬件/LED 状态
+status:
+  idle_led: "off"
+  recording_led: "blue"
+  processing_led: "yellow"
+  speaking_led: "green"
+
+# Cloud API Keys (uncomment and set your keys)
+# cloud_api_keys:
+#   deepseek: ""  # DEEPSEEK_API_KEY
+#   doubao: ""    # DOUBAO_API_KEY
+#   openai: ""    # OPENAI_API_KEY
+#   claude: ""    # ANTHROPIC_API_KEY
