@@ -967,6 +967,7 @@ export default function App() {
             <option value="auto" style={{ background: '#2d2f46', color: 'white' }}>⚙️ Auto</option>
             <option value="monitor" style={{ background: '#2d2f46', color: 'white' }}>👁️ Monitor</option>
           </select>
+        </div>
         
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
           <span className="status-dot" style={{ background: error ? '#e74c3c' : '#27ae60' }} title={error ? '错误' : '在线'} />
