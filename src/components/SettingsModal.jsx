@@ -1,4 +1,12 @@
 export default function SettingsModal({ settings, setSettings, setShowSettings, setShowWelcome, closeError, error }) {
+  const defaultUrls = {
+    mock: "",
+    deepseek: "https://api.deepseek.com/v1/chat/completions",
+    openai: "https://api.openai.com/v1/chat/completions",
+    "llama-cpp": "http://127.0.0.1:8082/v1/chat/completions",
+    ollama: "http://127.0.0.1:11434/v1/chat/completions",
+  };
+
   const handleSaveSettings = (e) => {
     e.preventDefault();
     localStorage.setItem('ai_provider', settings.provider);
@@ -38,7 +46,10 @@ export default function SettingsModal({ settings, setSettings, setShowSettings, 
             </label>
             <select
               value={settings.provider}
-              onChange={(e) => setSettings({...settings, provider: e.target.value})}
+              onChange={(e) => {
+                const provider = e.target.value;
+                setSettings({...settings, provider, apiUrl: defaultUrls[provider] || settings.apiUrl});
+              }}
               style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', border: '1px solid #3e415c', background: '#1a1b2e', color: '#ffffff' }}
             >
                <option value="mock">模拟（测试用）</option>
