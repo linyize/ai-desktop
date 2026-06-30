@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import * as path from "@tauri-apps/api/path";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { version } from "../package.json";
 
 import StepMessage from "./components/StepMessage";
 import SettingsModal from "./components/SettingsModal";
@@ -34,7 +35,7 @@ export default function App() {
   const [input, setInput] = useState("");
   const [mode, setMode] = useState("teach");
   const [messages, setMessages] = useState([
-    { id: 1, sender: "ai", text: "你好！我是你的 AI 助手。需要什么帮助？" }
+    { id: 1, sender: "ai", text: `你好！我是你的 AI 助手 v${version}。需要什么帮助？` }
   ]);
   const [isSending, setIsSending] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
