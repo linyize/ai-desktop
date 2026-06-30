@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import * as path from "@tauri-apps/api/path";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import StepMessage from "./components/StepMessage";
 import SettingsModal from "./components/SettingsModal";
@@ -940,8 +941,10 @@ export default function App() {
       )}
       
       <div className="header" onContextMenu={handleRightClick}>
-        <span className="logo">🤖</span>
-        <span className="title">AI Desktop</span>
+        <div className="header-drag" style={{ display: 'flex', alignItems: 'center', flex: 1, gap: '8px' }}>
+          <span className="logo">🤖</span>
+          <span className="title">AI Desktop</span>
+        </div>
         
         <div style={{
           display: 'flex',
@@ -1014,6 +1017,22 @@ export default function App() {
           >
             ⚙️
           </button>
+          <div className="window-controls">
+            <button
+              onClick={() => { try { getCurrentWindow().minimize(); } catch(e) {} }}
+              className="win-btn"
+              title="最小化"
+            >
+              ─
+            </button>
+            <button
+              onClick={() => { try { getCurrentWindow().close(); } catch(e) {} }}
+              className="win-btn win-close"
+              title="关闭"
+            >
+              ✕
+            </button>
+          </div>
         </div>
       </div>
       <div className="chat-area" ref={chatRef}>

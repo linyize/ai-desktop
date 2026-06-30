@@ -61,6 +61,19 @@ body {
   border-bottom: 1px solid var(--border-dark);
   background: var(--primary-gradient);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+  -webkit-app-region: drag;
+}
+
+.ai-sidebar .header .header-drag {
+  -webkit-app-region: drag;
+}
+
+.ai-sidebar .header button,
+.ai-sidebar .header .mode-tabs,
+.ai-sidebar .header .mode-tabs button,
+.ai-sidebar .header .window-controls,
+.ai-sidebar .header .window-controls button {
+  -webkit-app-region: no-drag;
 }
 
 .ai-sidebar .header .logo {
@@ -616,10 +629,51 @@ body {
   background: var(--primary-gradient);
   color: white;
   border: none;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
+}
+
+.ai-sidebar .about-modal .close-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+.ai-sidebar .about-modal .close-btn:active {
+  transform: scale(0.98);
+}
+
+/* 窗口控制按钮 */
+.ai-sidebar .header .window-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+}
+
+.ai-sidebar .header .win-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.7);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  line-height: 1;
+  min-width: 28px;
+  text-align: center;
+}
+
+.ai-sidebar .header .win-btn:hover {
+  background: rgba(255,255,255,0.15);
+  color: white;
+}
+
+.ai-sidebar .header .win-close:hover {
+  background: #e74c3c;
+  color: white;
 }
 
 .ai-sidebar .about-modal .close-btn:hover {
