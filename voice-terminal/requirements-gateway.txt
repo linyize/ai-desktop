@@ -1,4 +1,0 @@
-# Voice Gateway — Linux 端依赖
-websockets>=14.0
-edge-tts>=6.0
-pyyaml>=6.0
